@@ -6,10 +6,14 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint .",
+    "db:seed": "node scripts/seed-allowlist.mjs"
   },
   "dependencies": {
+    "@libsql/client": "^0.17.0",
+    "ffmpeg-static": "^5.3.0",
     "next": "16.1.6",
+    "next-auth": "^4.24.13",
     "react": "19.2.3",
     "react-dom": "19.2.3"
   },
