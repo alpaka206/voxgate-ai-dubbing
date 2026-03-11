@@ -31,7 +31,7 @@ export default async function StudioPage() {
     initialError = getVoiceListErrorMessage();
   }
 
-  const usageSummary = await getDailyUsageSummary(access.email, access.role);
+  const usageSummary = await getDailyUsageSummary(access.email);
 
   return (
     <AppShell
@@ -39,14 +39,12 @@ export default async function StudioPage() {
       currentPath="/studio"
       description="오디오나 비디오 파일을 업로드하면 음성 추출, 전사, 번역, 타깃 언어 더빙까지 한 번에 처리할 수 있습니다."
       title="스튜디오"
-      usageSummary={usageSummary}
     >
       <DubbingStudio
         initialError={initialError}
         initialUsedCount={usageSummary.used}
         maxMediaDurationSeconds={access.maxMediaDurationSeconds}
         maxUploadBytes={getMaxUploadBytes()}
-        roleLabel={access.roleLabel}
         targetLanguages={targetLanguages}
         usageLimit={usageSummary.limit}
         voices={voices}
