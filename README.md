@@ -1,60 +1,52 @@
-## readvox
+[한국어](./README.md) | [English](./README_EN.md)
 
-readvox는 Google 계정으로 로그인한 뒤, 허용 목록에 등록된 계정이 오디오 또는 비디오 파일을 업로드해 원하는 언어로 더빙 결과를 만들고 바로 재생하거나 다운로드할 수 있는 Next.js 기반 웹앱입니다.
+# readvox
 
-## 과제 요구사항 대응
+readvox는 업로드한 오디오 또는 비디오 파일을 다른 언어의 더빙 결과로 바꿔 주는 웹 앱입니다.
 
-- 로그인: Google OAuth 로그인 지원
-- 접근 제어: Turso 허용 목록에 등록된 이메일만 스튜디오 이용 가능
-- 미허용 사용자 처리: 허용 신청 가능, manager 계정이 member로 승인 가능
-- 입력: 오디오/비디오 파일 업로드 + 타깃 언어 선택
-- 처리: 음성 추출 -> ElevenLabs 전사 -> Gemini 번역 -> ElevenLabs 음성 합성
-- 출력: 더빙 결과 미리듣기 및 다운로드
-- 배포: Vercel 배포 기준으로 구성
+## 개요
+
+- Demo: [https://readvox.vercel.app](https://readvox.vercel.app)
+- Repository: [https://github.com/alpaka206/voxgate-ai-dubbing](https://github.com/alpaka206/voxgate-ai-dubbing)
+- 한 줄 소개:
+  업로드한 파일에서 음성을 추출하고, 전사와 번역을 거쳐 다른 언어의 더빙 결과를 한 번에 만들어 줍니다.
+
+## 30초 데모
+
+- 30초 GIF/영상 링크:
+- 미리보기:
 
 ## 핵심 기능
 
-- Google OAuth 로그인
-- Turso allowlist 기반 승인 계정 접근 제어
-- 미허용 계정의 허용 신청 접수
-- manager 계정의 허용 요청 승인 및 member 추가
-- 오디오/비디오 파일 업로드
-- ElevenLabs 기반 음성 전사와 타깃 언어 음성 합성
-- Gemini 기반 전사 텍스트 번역
-- 결과 오디오 또는 비디오 미리듣기 및 다운로드
+1. 허용 목록 기반 더빙 워크스페이스
+   Google 로그인은 열려 있지만, 실제 스튜디오 사용은 Turso 허용 목록에 등록된 계정으로 제한됩니다.
+2. 오디오/비디오 업로드형 더빙 파이프라인
+   업로드한 파일을 음성 추출, 전사, 번역, 음성 합성 흐름으로 처리합니다.
+3. ElevenLabs + Gemini 기반 다국어 출력
+   ElevenLabs가 전사와 음성 합성을 담당하고, Gemini가 타깃 언어 번역을 담당합니다.
+4. 브라우저 중심 결과 확인
+   더빙 결과를 브라우저에서 바로 재생하고 다운로드할 수 있습니다.
 
-## 서비스 흐름
+## 기술 스택
 
-1. 사용자가 Google 계정으로 로그인합니다.
-2. 현재 이메일이 Turso 허용 목록에 등록되어 있으면 스튜디오를 사용할 수 있습니다.
-3. 허용 목록에 없는 계정은 대시보드에서 `허용 신청하기`를 눌러 승인 요청을 보낼 수 있습니다.
-4. `kts123@estsoft.com`, `gyuwon05@gmail.com` manager 계정은 허용 목록 관리 페이지에서 요청을 확인하고 member 권한으로 승인할 수 있습니다.
-5. 이용 가능한 계정은 스튜디오에서 오디오 또는 비디오 파일을 업로드합니다.
-6. 서버에서 음성을 추출하고 전사합니다.
-7. 전사된 텍스트를 선택한 타깃 언어로 번역합니다.
-8. 번역된 텍스트를 ElevenLabs로 음성 합성합니다.
-9. 오디오 파일은 더빙 오디오로, 비디오 파일은 가능하면 더빙된 비디오로 반환합니다.
+- Frontend: Next.js App Router, React 19, Tailwind CSS v4
+- Auth: next-auth + Google OAuth
+- Database: Turso, `@libsql/client`
+- Media processing: `ffmpeg-static`
+- AI services:
+  - ElevenLabs Speech-to-Text
+  - ElevenLabs Text-to-Speech
+  - Gemini 2.5 Flash-Lite
+- Deployment: Vercel
 
-## 이용 제한
+## AI Agent 활용 방식
 
-- 하루 더빙 횟수: 10회
-- 최대 파일 길이: 180초
-- 업로드 크기: 50MB 이하
+- MVP 범위, 이슈 분리, 커밋 단위, 릴리스 흐름을 AI 코딩 에이전트와 함께 설계했습니다.
+- 인증 흐름, 허용 목록 정책, 더빙 파이프라인 연결, UI 문구, 문서 구조를 반복적으로 정리했습니다.
+- 주요 변경 이력과 판단 근거는 [docs/agent-log.md](./docs/agent-log.md)에 기록했습니다.
+- `lint`, `build`, 시드 검증도 에이전트 기반 체크포인트로 진행했습니다.
 
-위 제한은 서버에서 직접 검사합니다.
-
-- 일일 더빙 횟수: `daily_generation_usage` 테이블과 현재 사용량을 비교해 차단
-- 최대 파일 길이: 업로드한 오디오/비디오의 실제 재생 길이를 검사해 차단
-
-## 주요 페이지
-
-- `/`: 랜딩 페이지
-- `/dashboard`: 로그인 후 허용 상태, 사용량, 바로가기 확인
-- `/studio`: 파일 업로드형 AI 더빙 스튜디오
-- `/mypage`: 계정, 역할, 허용 상태 확인
-- `/allowlist`: manager 전용 허용 요청 승인 및 member 추가
-
-## 시작 방법
+## 로컬 실행
 
 1. 의존성을 설치합니다.
 
@@ -64,30 +56,16 @@ npm install
 
 2. `.env.example`을 `.env.local`로 복사하고 값을 채웁니다.
 
-3. Google Cloud Console에서 아래 Redirect URL을 등록합니다.
+3. Google OAuth callback URL을 등록합니다.
 
-- 로컬: `http://localhost:3000/api/auth/callback/google`
-- 배포: `https://readvox.vercel.app/api/auth/callback/google`
+- Local: `http://localhost:3000/api/auth/callback/google`
+- Production: `https://readvox.vercel.app/api/auth/callback/google`
 
-4. Turso DB를 현재 구조로 초기화하고 기본 계정을 다시 넣습니다.
+4. Turso 스키마를 초기화하고 시드 데이터를 넣습니다.
 
 ```bash
 npm run db:seed
 ```
-
-`npm run db:seed`는 `allowlist_users`, `access_requests`, `daily_generation_usage` 테이블을 다시 만들기 때문에 기존 데이터가 초기화됩니다.
-
-기본 시드 계정:
-
-- `kts123@estsoft.com` - `manager`
-- `gyuwon05@gmail.com` - `manager`
-
-평가용 확인 흐름 예시:
-
-1. 일반 Google 계정으로 로그인
-2. 대시보드에서 허용 신청 접수 확인
-3. manager 계정으로 로그인해 `/allowlist`에서 요청 승인
-4. 다시 일반 계정으로 로그인해 `/studio` 접근 및 더빙 실행 확인
 
 5. 개발 서버를 실행합니다.
 
@@ -104,11 +82,30 @@ npm run dev
 - `TURSO_AUTH_TOKEN`
 - `ELEVENLABS_API_KEY`
 - `ELEVENLABS_MODEL_ID`
-- `ELEVENLABS_STT_MODEL_ID` - 기본값 `scribe_v2`
+- `ELEVENLABS_STT_MODEL_ID`
 - `GEMINI_API_KEY`
-- `GEMINI_MODEL` - 기본값 `gemini-2.5-flash-lite`
+- `GEMINI_MODEL`
 
-## Turso 스키마
+## 아키텍처
+
+### 처리 흐름
+
+1. 브라우저가 보호된 `/api/dub` 라우트로 오디오 또는 비디오 파일을 업로드합니다.
+2. Next.js 서버가 `ffmpeg`로 음성을 추출합니다.
+3. ElevenLabs가 추출된 음성을 전사합니다.
+4. Gemini가 전사문을 타깃 언어로 번역합니다.
+5. ElevenLabs가 번역된 문장을 새 음성 트랙으로 합성합니다.
+6. 입력이 비디오면 새 오디오를 다시 합쳐 비디오를 반환하고, 그렇지 않으면 더빙 오디오를 반환합니다.
+
+## 주요 라우트
+
+- `/`: 랜딩 페이지
+- `/dashboard`: 계정 상태와 바로가기
+- `/studio`: 보호된 더빙 워크스페이스
+- `/mypage`: 계정 정보와 사용량
+- `/allowlist`: 관리자용 허용 목록 관리
+
+## 데이터 모델
 
 ```sql
 CREATE TABLE allowlist_users (
@@ -139,13 +136,6 @@ CREATE TABLE daily_generation_usage (
   PRIMARY KEY (email, usage_date)
 );
 ```
-
-## 구현 메모
-
-- self-approval 방식은 제거했고, 미허용 사용자는 신청만 할 수 있고 manager 계정이 member로 승인합니다.
-- manager 권한은 allowlist 테이블의 `role` 값으로 구분합니다.
-- 비디오 업로드 시 원본 영상에 새 오디오를 다시 합쳐 비디오로 반환을 시도합니다.
-- 비디오 합성에 실패하면 더빙 오디오 결과로 대체합니다.
 
 ## 검증
 
