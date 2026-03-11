@@ -1,10 +1,61 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
+
 import "./globals.css";
 
+const siteUrl = "https://readvox.vercel.app";
+const description =
+  "Upload audio or video, transcribe with ElevenLabs, translate with Gemini, and return dubbed output in your target language.";
+
 export const metadata: Metadata = {
-  title: "readvox",
-  description:
-    "Google 로그인과 승인 기반 접근 제어를 통해 오디오·비디오 파일을 원하는 언어로 더빙하고 재생·다운로드할 수 있는 AI 더빙 웹앱입니다.",
+  metadataBase: new URL(siteUrl),
+  title: {
+    default: "readvox",
+    template: "%s | readvox",
+  },
+  description,
+  applicationName: "readvox",
+  keywords: [
+    "readvox",
+    "ai dubbing",
+    "video dubbing",
+    "audio dubbing",
+    "elevenlabs",
+    "gemini",
+    "next.js",
+  ],
+  alternates: {
+    canonical: "/",
+  },
+  openGraph: {
+    title: "readvox",
+    description,
+    locale: "ko_KR",
+    siteName: "readvox",
+    type: "website",
+    url: siteUrl,
+    images: [
+      {
+        url: "/readvox-mark.svg",
+        width: 1200,
+        height: 630,
+        alt: "readvox AI dubbing workspace",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "readvox",
+    description,
+    images: ["/readvox-mark.svg"],
+  },
+  icons: {
+    icon: "/readvox-mark.svg",
+    shortcut: "/readvox-mark.svg",
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#fff7ef",
 };
 
 export default function RootLayout({

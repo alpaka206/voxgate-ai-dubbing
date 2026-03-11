@@ -64,10 +64,10 @@ export function AllowlistManager({ entries, pendingRequests }: AllowlistManagerP
       | null;
 
     if (!response.ok) {
-      throw new Error(payload?.error ?? "member 승인에 실패했습니다.");
+      throw new Error(payload?.error ?? "사용 권한 부여에 실패했습니다.");
     }
 
-    return payload?.message ?? `${targetEmail} 계정을 member로 허용했습니다.`;
+    return payload?.message ?? `${targetEmail} 계정을 사용 가능 상태로 추가했습니다.`;
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -83,7 +83,7 @@ export function AllowlistManager({ entries, pendingRequests }: AllowlistManagerP
         router.refresh();
       });
     } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : "member 승인에 실패했습니다.");
+      setError(requestError instanceof Error ? requestError.message : "사용 권한 부여에 실패했습니다.");
     }
   }
 
@@ -97,7 +97,7 @@ export function AllowlistManager({ entries, pendingRequests }: AllowlistManagerP
         router.refresh();
       });
     } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : "member 승인에 실패했습니다.");
+      setError(requestError instanceof Error ? requestError.message : "사용 권한 부여에 실패했습니다.");
     }
   }
 
@@ -110,7 +110,7 @@ export function AllowlistManager({ entries, pendingRequests }: AllowlistManagerP
             대기 중인 요청 {pendingRequests.length}개
           </h2>
           <p className="mt-3 text-sm leading-6 text-muted">
-            허용 신청을 보낸 계정을 확인하고, 필요한 경우 member 권한으로 승인할 수 있습니다.
+            허용 신청을 보낸 계정을 확인하고, 필요한 경우 바로 사용 가능한 상태로 승인할 수 있습니다.
           </p>
 
           <div className="mt-6 space-y-3">
@@ -137,7 +137,7 @@ export function AllowlistManager({ entries, pendingRequests }: AllowlistManagerP
                         void handleApprove(request.email, request.name);
                       }}
                     >
-                      member로 허용
+                      허용하기
                     </button>
                   </div>
                 </div>
@@ -149,10 +149,10 @@ export function AllowlistManager({ entries, pendingRequests }: AllowlistManagerP
         <div className="rounded-[1.75rem] border border-border bg-white/92 p-6 shadow-[0_18px_40px_rgba(31,38,52,0.05)]">
           <p className="text-xs font-semibold tracking-[0.16em] text-accent">직접 추가</p>
           <h2 className="mt-3 text-2xl font-semibold tracking-tight text-foreground">
-            이메일을 바로 member로 허용
+            이메일을 바로 허용 목록에 추가
           </h2>
           <p className="mt-3 text-sm leading-6 text-muted">
-            허용 신청 없이 바로 접근을 열어야 할 경우, 이메일을 직접 입력해 member 권한으로 추가할 수 있습니다.
+            허용 신청 없이 바로 접근을 열어야 할 경우, 이메일을 직접 입력해 바로 사용 가능한 계정으로 추가할 수 있습니다.
           </p>
 
           <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
@@ -183,7 +183,7 @@ export function AllowlistManager({ entries, pendingRequests }: AllowlistManagerP
               className="inline-flex h-12 items-center justify-center rounded-full bg-accent px-6 text-sm font-semibold text-white shadow-[0_16px_32px_rgba(255,127,92,0.24)] transition hover:-translate-y-0.5 hover:bg-accent-strong disabled:cursor-not-allowed disabled:border disabled:border-border disabled:bg-[#f4f4f1] disabled:text-muted disabled:shadow-none"
               disabled={isPending || !email.trim()}
             >
-              {isPending ? "처리 중..." : "member로 추가하기"}
+              {isPending ? "처리 중..." : "허용 목록에 추가하기"}
             </button>
           </form>
 
@@ -223,7 +223,7 @@ export function AllowlistManager({ entries, pendingRequests }: AllowlistManagerP
                       : "bg-[#fff3eb] text-[#9d3b1e]"
                   }`}
                 >
-                  {entry.role === "manager" ? "manager" : "member"}
+                  {entry.role === "manager" ? "관리자" : "사용 계정"}
                 </span>
               </div>
 
