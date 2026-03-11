@@ -26,12 +26,12 @@ export async function POST() {
 
     if (result.state === "already_requested") {
       return NextResponse.json({
-        message: "이미 허용 신청이 접수되었습니다. 관리자 승인을 기다려 주세요.",
+        message: "이미 허용 신청이 접수되었습니다. 관리자 확인 후 사용할 수 있습니다.",
       });
     }
 
     return NextResponse.json({
-      message: "허용 신청이 접수되었습니다. 관리자 승인이 완료되면 바로 사용할 수 있습니다.",
+      message: "허용 신청이 접수되었습니다. 관리자 확인이 끝나면 바로 사용할 수 있습니다.",
     });
   } catch (error) {
     return NextResponse.json(

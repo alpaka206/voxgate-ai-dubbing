@@ -11,9 +11,9 @@ type HomePageProps = {
 };
 
 const serviceHighlights = [
-  "오디오와 비디오 파일을 업로드해 실제 더빙 결과를 확인할 수 있어요.",
-  "음성 추출, 전사, 번역, 타깃 언어 음성 생성까지 한 흐름으로 이어집니다.",
-  "허용 목록에 등록된 계정만 결과를 바로 재생하고 다운로드할 수 있어요.",
+  "오디오와 비디오 파일을 올리면 브라우저에서 바로 더빙 결과를 확인할 수 있어요.",
+  "음성 추출, 전사, 번역, 타깃 언어 음성 생성이 한 흐름으로 자연스럽게 이어집니다.",
+  "접근이 허용된 계정은 결과를 재생하고 다운로드까지 바로 진행할 수 있어요.",
 ];
 
 export default async function HomePage({ searchParams }: HomePageProps) {
@@ -36,12 +36,12 @@ export default async function HomePage({ searchParams }: HomePageProps) {
             </p>
             <div className="space-y-4">
               <h1 className="max-w-2xl text-4xl font-semibold tracking-tight text-foreground sm:text-4xl">
-                파일을 올리면 원하는 언어로 더빙 결과를 바로 확인할 수 있어요
+                파일을 올리면 원하는 언어의 더빙 결과를 바로 확인할 수 있어요
               </h1>
               <p className="max-w-2xl text-lg leading-8 text-muted">
                 readvox는 오디오와 비디오 파일을 업로드해 음성 추출, 전사, 번역,
-                음성 합성까지 이어지는 AI 더빙 파이프라인을 웹에서 확인할 수
-                있는 과제용 서비스입니다.
+                음성 합성까지 이어지는 AI 더빙 워크스페이스입니다. 업로드부터
+                결과 확인과 다운로드까지 한 화면에서 자연스럽게 이어집니다.
               </p>
             </div>
           </div>
@@ -52,8 +52,8 @@ export default async function HomePage({ searchParams }: HomePageProps) {
               <SignInButton />
               <p className="text-sm leading-6 text-muted">
                 Google 계정으로 로그인한 뒤 현재 이메일이 허용 목록에 등록되어
-                있는지 확인합니다. 등록되지 않은 계정은 로그인 후 허용 신청을
-                보낼 수 있습니다.
+                있는지 확인합니다. 아직 허용되지 않은 계정은 로그인 후 간단히
+                허용 신청을 남길 수 있습니다.
               </p>
             </div>
           </div>
@@ -66,10 +66,8 @@ export default async function HomePage({ searchParams }: HomePageProps) {
             </p>
             <ol className="mt-4 space-y-3 text-sm leading-7 text-muted">
               <li>1. Google 계정으로 로그인합니다.</li>
-              <li>2. 허용 목록에 등록된 계정이면 스튜디오에서 파일을 업로드합니다.</li>
-              <li>
-                3. 타깃 언어를 고르고 더빙 결과를 재생하거나 다운로드합니다.
-              </li>
+              <li>2. 접근이 허용된 계정이면 스튜디오에서 파일을 업로드합니다.</li>
+              <li>3. 타깃 언어를 고르고 더빙 결과를 재생하거나 다운로드합니다.</li>
             </ol>
           </div>
 

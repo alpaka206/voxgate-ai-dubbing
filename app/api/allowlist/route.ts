@@ -34,7 +34,7 @@ export async function POST(request: Request) {
     });
 
     return NextResponse.json({
-      message: `${entry?.email ?? body.email} 계정을 member로 허용했습니다.`,
+      message: `${entry?.email ?? body.email} 계정을 사용 가능한 상태로 추가했습니다.`,
     });
   } catch (error) {
     return NextResponse.json(

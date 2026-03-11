@@ -10,7 +10,7 @@ export function SignInButton() {
     <button
       type="button"
       className={`${sharedClasses} bg-accent text-white shadow-[0_18px_40px_rgba(255,127,92,0.28)] hover:-translate-y-0.5 hover:bg-accent-strong`}
-      onClick={() => signIn("google", { callbackUrl: "/dashboard?notice=signed-in" })}
+      onClick={() => signIn("google", { callbackUrl: "/dashboard" })}
     >
       Google로 로그인
     </button>
