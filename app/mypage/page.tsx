@@ -1,10 +1,10 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { AccessRequestCard } from "@/components/access-request-card";
 import { AppShell } from "@/components/app-shell";
 import { getAccessState } from "@/lib/auth";
 import { formatDurationLabel } from "@/lib/display";
-import { getRoleFeatures } from "@/lib/allowlist";
 import { getDailyUsageSummary } from "@/lib/usage";
 
 export default async function MyPage() {
@@ -14,21 +14,19 @@ export default async function MyPage() {
     redirect("/?notice=login-required");
   }
 
-  const features = getRoleFeatures(access.role);
-  const usageSummary = await getDailyUsageSummary(access.email, access.role);
+  const usageSummary = await getDailyUsageSummary(access.email);
   const statusText = {
-    approved: "승인 완료",
-    not_requested: "승인 필요",
-    pending: "검토 중",
+    approved: "허용됨",
+    pending: "승인 대기",
+    not_requested: "미허용",
   }[access.membershipStatus];
 
   return (
     <AppShell
       access={access}
       currentPath="/mypage"
-      description="현재 로그인한 계정과 플랜 정보, 승인 상태, 오늘 사용량을 확인할 수 있는 계정 페이지입니다."
+      description="현재 로그인한 계정과 허용 상태, 오늘 사용량, 업로드 한도를 확인할 수 있는 계정 페이지입니다."
       title="마이페이지"
-      usageSummary={usageSummary}
     >
       <div className="grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
         <div className="grid gap-4">
@@ -41,7 +39,7 @@ export default async function MyPage() {
               </div>
               <div>
                 <p className="text-sm text-muted">이메일</p>
-                <p className="text-lg font-semibold text-foreground">{access.email}</p>
+                <p className="break-all text-lg font-semibold text-foreground">{access.email}</p>
               </div>
             </div>
           </div>
@@ -50,37 +48,58 @@ export default async function MyPage() {
             <p className="text-xs font-semibold tracking-[0.16em] text-accent">이용 정보</p>
             <div className="mt-4 grid gap-4 sm:grid-cols-4">
               <div>
-                <p className="text-sm text-muted">상태</p>
+                <p className="text-sm text-muted">허용 상태</p>
                 <p className="text-lg font-semibold text-foreground">{statusText}</p>
               </div>
               <div>
-                <p className="text-sm text-muted">플랜</p>
-                <p className="text-lg font-semibold text-foreground">{features.label}</p>
+                <p className="text-sm text-muted">권한</p>
+                <p className="text-lg font-semibold text-foreground">
+                  {access.role === "manager" ? "manager" : access.role === "member" ? "member" : "미지정"}
+                </p>
               </div>
               <div>
                 <p className="text-sm text-muted">최대 길이</p>
                 <p className="text-lg font-semibold text-foreground">
-                  {formatDurationLabel(features.maxMediaDurationSeconds)}
+                  {formatDurationLabel(access.maxMediaDurationSeconds)}
                 </p>
               </div>
               <div>
-                <p className="text-sm text-muted">오늘 남은 횟수</p>
+                <p className="text-sm text-muted">오늘 사용량</p>
                 <p className="text-lg font-semibold text-foreground">
-                  {access.canUseStudio ? `${usageSummary.remaining}회` : "승인 후 사용"}
+                  {access.canUseStudio ? `${usageSummary.used} / ${usageSummary.limit}회` : "승인 후 이용 가능"}
                 </p>
               </div>
             </div>
-            <p className="mt-4 text-sm leading-6 text-muted">{features.description}</p>
+            <p className="mt-4 text-sm leading-6 text-muted">
+              허용 목록에 등록된 계정은 하루 {access.dailyGenerationLimit}회, 최대{" "}
+              {formatDurationLabel(access.maxMediaDurationSeconds)} 길이의 파일까지 더빙할 수 있습니다.
+            </p>
           </div>
+
+          {access.canManageAllowlist ? (
+            <div className="rounded-[1.5rem] border border-border bg-[#eef6ff] p-6">
+              <p className="text-xs font-semibold tracking-[0.16em] text-[#2c6db2]">관리자 바로가기</p>
+              <h2 className="mt-3 text-2xl font-semibold tracking-tight text-foreground">
+                허용 목록을 직접 관리할 수 있습니다
+              </h2>
+              <p className="mt-3 text-sm leading-6 text-muted">
+                평가 계정과 테스트 계정을 허용 목록에 추가하고 현재 등록된 목록을 확인할 수 있습니다.
+              </p>
+              <Link
+                href="/allowlist"
+                className="mt-5 inline-flex items-center justify-center rounded-full border border-border bg-white px-5 py-3 text-sm font-semibold text-foreground transition hover:-translate-y-0.5 hover:bg-[#fff7f1]"
+              >
+                허용 목록 관리로 이동
+              </Link>
+            </div>
+          ) : null}
         </div>
 
         <AccessRequestCard
+          canManageAllowlist={access.canManageAllowlist}
           canUseStudio={access.canUseStudio}
-          currentPlan={access.role}
-          currentPlanLabel={features.label}
+          email={access.email}
           membershipStatus={access.membershipStatus}
-          requestedPlan={access.requestedPlan}
-          requestedPlanLabel={access.requestedPlan ? getRoleFeatures(access.requestedPlan).label : null}
         />
       </div>
     </AppShell>

@@ -11,7 +11,6 @@ type DubbingStudioProps = {
   initialUsedCount: number;
   maxMediaDurationSeconds: number;
   maxUploadBytes: number;
-  roleLabel: string;
   targetLanguages: TargetLanguage[];
   usageLimit: number;
   voices: VoiceOption[];
@@ -37,7 +36,6 @@ export function DubbingStudio({
   initialUsedCount,
   maxMediaDurationSeconds,
   maxUploadBytes,
-  roleLabel,
   targetLanguages,
   usageLimit,
   voices,
@@ -138,8 +136,8 @@ export function DubbingStudio({
       <div className="rounded-[1.75rem] border border-border bg-white/92 p-6 shadow-[0_18px_40px_rgba(31,38,52,0.05)]">
         <div className="grid gap-4 sm:grid-cols-4">
           <div className="rounded-[1.25rem] border border-border bg-[#fffaf6] px-4 py-4">
-            <p className="text-xs font-semibold tracking-[0.16em] text-accent">현재 플랜</p>
-            <p className="mt-2 text-lg font-semibold text-foreground">{roleLabel}</p>
+            <p className="text-xs font-semibold tracking-[0.16em] text-accent">이용 상태</p>
+            <p className="mt-2 text-lg font-semibold text-foreground">허용 목록 등록 완료</p>
           </div>
           <div className="rounded-[1.25rem] border border-border bg-[#fffaf6] px-4 py-4">
             <p className="text-xs font-semibold tracking-[0.16em] text-accent">최대 길이</p>

@@ -5,12 +5,16 @@ import { usePathname, useRouter } from "next/navigation";
 
 const noticeMap = {
   "approval-required": {
-    message: "승인된 계정만 스튜디오를 사용할 수 있습니다. 먼저 이용 신청 상태를 확인해 주세요.",
-    title: "이용 승인이 필요해요",
+    message: "허용 목록에 등록된 계정만 스튜디오를 사용할 수 있습니다. 대시보드에서 허용 신청을 보내거나 manager 계정에 직접 요청해 주세요.",
+    title: "접근 권한이 필요해요",
   },
   "login-required": {
     message: "로그인 후 이용할 수 있습니다.",
     title: "로그인이 필요해요",
+  },
+  "manage-required": {
+    message: "허용 목록 관리는 관리자 계정만 사용할 수 있습니다.",
+    title: "관리 권한이 필요해요",
   },
   "signed-in": {
     message: "로그인이 완료되었습니다. 현재 계정 상태와 이용 가능한 기능을 확인해 보세요.",
