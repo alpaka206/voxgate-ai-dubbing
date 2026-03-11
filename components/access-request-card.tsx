@@ -1,85 +1,80 @@
 import Link from "next/link";
 
-import { PlanRequestButton } from "@/components/plan-request-button";
-import type { AccessRole } from "@/lib/allowlist";
+import { AccessRequestButton } from "@/components/access-request-button";
+import type { MembershipStatus } from "@/lib/allowlist";
 
 type AccessRequestCardProps = {
+  canManageAllowlist: boolean;
   canUseStudio: boolean;
-  currentPlan: AccessRole;
-  currentPlanLabel: string;
-  membershipStatus: "approved" | "not_requested" | "pending";
-  requestedPlan: AccessRole | null;
-  requestedPlanLabel?: string | null;
+  email: string | null;
+  membershipStatus: MembershipStatus;
 };
 
 export function AccessRequestCard({
+  canManageAllowlist,
   canUseStudio,
-  currentPlan,
-  currentPlanLabel,
+  email,
   membershipStatus,
-  requestedPlan,
-  requestedPlanLabel,
 }: AccessRequestCardProps) {
+  if (canUseStudio) {
+    return (
+      <div className="rounded-[1.75rem] border border-border bg-white/92 p-6 shadow-[0_18px_40px_rgba(31,38,52,0.06)]">
+        <div className="space-y-3">
+          <p className="text-xs font-semibold tracking-[0.18em] text-accent">
+            {canManageAllowlist ? "허용 목록 관리" : "이용 안내"}
+          </p>
+          <h2 className="text-2xl font-semibold tracking-tight text-foreground">
+            {canManageAllowlist ? "허용 요청을 직접 승인할 수 있어요" : "현재 계정은 바로 서비스를 이용할 수 있어요"}
+          </h2>
+          <p className="text-sm leading-6 text-muted">
+            {canManageAllowlist
+              ? "manager 권한 계정입니다. 허용 목록 페이지에서 대기 중인 요청을 member로 승인하거나 평가 계정을 직접 추가할 수 있습니다."
+              : "허용 목록에 등록된 계정입니다. 스튜디오에서 바로 더빙을 시작하거나 마이페이지에서 현재 상태를 확인해 보세요."}
+          </p>
+        </div>
+
+        <div className="mt-5">
+          <Link
+            href={canManageAllowlist ? "/allowlist" : "/studio"}
+            className="inline-flex items-center justify-center rounded-full border border-border bg-white px-5 py-3 text-sm font-semibold text-foreground transition hover:-translate-y-0.5 hover:bg-[#fff7f1]"
+          >
+            {canManageAllowlist ? "허용 목록 관리하기" : "스튜디오 열기"}
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
   const isPending = membershipStatus === "pending";
-  const needsApproval = !canUseStudio;
 
   return (
-    <div className="rounded-[1.75rem] border border-border bg-white/92 p-6 shadow-[0_18px_40px_rgba(31,38,52,0.06)]">
+    <div className="rounded-[1.75rem] border border-[#f0d5c9] bg-[#fff9f5] p-6 shadow-[0_18px_40px_rgba(31,38,52,0.06)]">
       <div className="space-y-3">
-        <p className="text-xs font-semibold tracking-[0.18em] text-accent">
-          {needsApproval ? "이용 승인" : "플랜 안내"}
-        </p>
+        <p className="text-xs font-semibold tracking-[0.18em] text-accent">허용 목록 안내</p>
         <h2 className="text-2xl font-semibold tracking-tight text-foreground">
-          {needsApproval
-            ? isPending
-              ? "이용 신청이 접수되었습니다"
-              : "승인 후 스튜디오를 사용할 수 있어요"
-            : isPending
-              ? "플랜 업그레이드 요청을 확인해 주세요"
-              : "더 긴 파일이 필요하면 플랜을 올려보세요"}
+          {isPending ? "허용 신청이 접수되었습니다" : "현재 계정은 아직 허용 목록에 등록되지 않았습니다"}
         </h2>
         <p className="text-sm leading-6 text-muted">
-          {needsApproval
-            ? isPending
-              ? "현재 계정은 검토 중입니다. 승인되면 스튜디오에서 파일 업로드형 더빙을 바로 사용할 수 있습니다."
-              : "로그인은 완료됐지만 아직 허용 목록에 등록되지 않았습니다. 이용 신청을 남기면 검토 후 승인할 수 있습니다."
-            : isPending
-              ? "업그레이드 검토 중에는 현재 플랜으로 계속 사용할 수 있습니다. 반영 전까지는 기존 한도가 유지됩니다."
-              : "플랜이 올라가면 하루 생성 횟수와 업로드 가능한 파일 길이가 함께 늘어납니다."}
+          {isPending
+            ? "manager 계정이 요청을 확인하면 member 권한으로 승인할 수 있습니다. 승인 후에는 스튜디오를 바로 사용할 수 있습니다."
+            : "readvox는 허용 목록에 등록된 계정만 스튜디오를 사용할 수 있습니다. 아래 버튼으로 허용 신청을 보낼 수 있습니다."}
         </p>
       </div>
 
-      <div className={`mt-5 grid gap-3 ${isPending ? "sm:grid-cols-2" : ""}`}>
-        <div className="rounded-[1.25rem] border border-border bg-[#fffaf6] px-4 py-4">
-          <p className="text-xs font-semibold tracking-[0.16em] text-accent">현재 플랜</p>
-          <p className="mt-2 text-lg font-semibold text-foreground">{currentPlanLabel}</p>
-        </div>
-        {isPending ? (
-          <div className="rounded-[1.25rem] border border-border bg-[#fffaf6] px-4 py-4">
-            <p className="text-xs font-semibold tracking-[0.16em] text-accent">검토 중인 플랜</p>
-            <p className="mt-2 text-lg font-semibold text-foreground">
-              {requestedPlanLabel ?? "요청 확인 중"}
-            </p>
-          </div>
-        ) : null}
+      <div className="mt-5 rounded-[1.25rem] border border-border bg-white px-4 py-4">
+        <p className="text-xs font-semibold tracking-[0.16em] text-accent">현재 로그인한 이메일</p>
+        <p className="mt-2 break-all text-lg font-semibold text-foreground">
+          {email ?? "이메일을 확인할 수 없습니다."}
+        </p>
       </div>
 
       <div className="mt-5">
-        {needsApproval ? (
-          <PlanRequestButton
-            currentRole={currentPlan}
-            hasStudioAccess={canUseStudio}
-            membershipStatus={membershipStatus}
-            requestedPlan={requestedPlan}
-            targetPlan="free"
-          />
+        {isPending ? (
+          <div className="rounded-[1.25rem] border border-border bg-white px-4 py-4 text-sm leading-6 text-muted">
+            현재 신청 상태: manager 승인 대기 중
+          </div>
         ) : (
-          <Link
-            href="/plans"
-            className="inline-flex items-center justify-center rounded-full border border-border bg-white px-5 py-3 text-sm font-semibold text-foreground transition hover:-translate-y-0.5 hover:bg-[#fff7f1]"
-          >
-            플랜 비교하기
-          </Link>
+          <AccessRequestButton />
         )}
       </div>
     </div>
