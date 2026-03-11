@@ -4,11 +4,11 @@ import { getServerSession } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 
 import {
-  type AccessRole,
   type MembershipStatus,
+  findAccessRequestByEmail,
   findAllowlistEntryByEmail,
-  getRoleFeatures,
   normalizeEmail,
+  servicePolicy,
 } from "@/lib/allowlist";
 
 export const authOptions: NextAuthOptions = {
@@ -46,6 +46,7 @@ export const authOptions: NextAuthOptions = {
 };
 
 export type AccessState = {
+  canManageAllowlist: boolean;
   canUseStudio: boolean;
   dailyGenerationLimit: number;
   email: string | null;
@@ -53,9 +54,8 @@ export type AccessState = {
   maxMediaDurationSeconds: number;
   membershipStatus: MembershipStatus;
   name: string | null;
-  requestedPlan: AccessRole | null;
-  role: AccessRole;
-  roleLabel: string;
+  requestEntry: Awaited<ReturnType<typeof findAccessRequestByEmail>>;
+  role: "manager" | "member" | null;
   session: Session | null;
 };
 
@@ -63,26 +63,26 @@ export async function getAccessState(): Promise<AccessState> {
   const session = await getServerSession(authOptions);
   const email = session?.user?.email ? normalizeEmail(session.user.email) : null;
   const entry = email ? await findAllowlistEntryByEmail(email) : null;
-  const membershipStatus: MembershipStatus = !entry
-    ? "not_requested"
-    : entry.status === "approved" && entry.requestedPlan && entry.requestedPlan !== entry.role
+  const requestEntry = email ? await findAccessRequestByEmail(email) : null;
+  const membershipStatus: MembershipStatus = entry
+    ? "approved"
+    : requestEntry?.status === "pending"
       ? "pending"
-      : entry.status;
-  const role = entry?.role ?? "free";
-  const features = getRoleFeatures(role);
-  const isApproved = entry?.status === "approved";
+      : "not_requested";
+  const isApproved = Boolean(email && entry);
+  const role = entry?.role ?? null;
 
   return {
-    canUseStudio: Boolean(email && isApproved && features.canUseStudio),
-    dailyGenerationLimit: features.dailyGenerationLimit,
+    canManageAllowlist: role === "manager",
+    canUseStudio: isApproved,
+    dailyGenerationLimit: servicePolicy.dailyGenerationLimit,
     email,
     entry,
-    maxMediaDurationSeconds: features.maxMediaDurationSeconds,
+    maxMediaDurationSeconds: servicePolicy.maxMediaDurationSeconds,
     membershipStatus,
-    name: session?.user?.name ?? entry?.name ?? null,
-    requestedPlan: entry?.requestedPlan ?? null,
+    name: session?.user?.name ?? entry?.name ?? requestEntry?.name ?? null,
+    requestEntry,
     role,
-    roleLabel: features.label,
     session,
   };
 }

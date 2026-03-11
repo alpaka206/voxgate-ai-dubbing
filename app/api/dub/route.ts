@@ -54,12 +54,12 @@ export async function POST(request: Request) {
 
   if (!access.canUseStudio) {
     return jsonResponse(
-      { error: "현재 계정은 승인 후 사용할 수 있습니다. 대시보드에서 이용 신청 상태를 확인해 주세요." },
+      { error: "허용 목록에 등록된 계정만 스튜디오를 사용할 수 있습니다." },
       403,
     );
   }
 
-  const usageSummary = await getDailyUsageSummary(access.email, access.role);
+  const usageSummary = await getDailyUsageSummary(access.email);
 
   if (usageSummary.remaining <= 0) {
     return jsonResponse(
@@ -102,7 +102,7 @@ export async function POST(request: Request) {
     if (durationSeconds && durationSeconds > access.maxMediaDurationSeconds) {
       return jsonResponse(
         {
-          error: `현재 플랜에서는 ${access.maxMediaDurationSeconds}초 이하 파일만 더빙할 수 있습니다.`,
+          error: `현재 서비스에서는 ${access.maxMediaDurationSeconds}초 이하 파일만 더빙할 수 있습니다.`,
         },
         400,
       );
