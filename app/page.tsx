@@ -13,7 +13,7 @@ type HomePageProps = {
 const serviceHighlights = [
   "오디오와 비디오 파일을 업로드해 실제 더빙 결과를 확인할 수 있어요.",
   "음성 추출, 전사, 번역, 타깃 언어 음성 생성까지 한 흐름으로 이어집니다.",
-  "승인된 계정은 결과를 바로 재생하고 다운로드할 수 있어요.",
+  "허용 목록에 등록된 계정만 결과를 바로 재생하고 다운로드할 수 있어요.",
 ];
 
 export default async function HomePage({ searchParams }: HomePageProps) {
@@ -40,8 +40,8 @@ export default async function HomePage({ searchParams }: HomePageProps) {
               </h1>
               <p className="max-w-2xl text-lg leading-8 text-muted">
                 readvox는 오디오와 비디오 파일을 업로드해 음성 추출, 전사, 번역,
-                음성 합성까지 이어지는 AI 더빙 파이프라인을 빠르게 확인할 수
-                있는 웹앱입니다.
+                음성 합성까지 이어지는 AI 더빙 파이프라인을 웹에서 확인할 수
+                있는 과제용 서비스입니다.
               </p>
             </div>
           </div>
@@ -51,8 +51,9 @@ export default async function HomePage({ searchParams }: HomePageProps) {
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
               <SignInButton />
               <p className="text-sm leading-6 text-muted">
-                Google 계정으로 로그인한 뒤 대시보드에서 승인 상태를 확인하고
-                스튜디오로 이동할 수 있습니다.
+                Google 계정으로 로그인한 뒤 현재 이메일이 허용 목록에 등록되어
+                있는지 확인합니다. 등록되지 않은 계정은 로그인 후 허용 신청을
+                보낼 수 있습니다.
               </p>
             </div>
           </div>
@@ -65,7 +66,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
             </p>
             <ol className="mt-4 space-y-3 text-sm leading-7 text-muted">
               <li>1. Google 계정으로 로그인합니다.</li>
-              <li>2. 승인된 계정이면 스튜디오에서 파일을 업로드합니다.</li>
+              <li>2. 허용 목록에 등록된 계정이면 스튜디오에서 파일을 업로드합니다.</li>
               <li>
                 3. 타깃 언어를 고르고 더빙 결과를 재생하거나 다운로드합니다.
               </li>

@@ -1,6 +1,5 @@
-import type { AccessRole } from "@/lib/allowlist";
 import { getDb } from "@/lib/db";
-import { roleFeatures } from "@/lib/allowlist";
+import { servicePolicy } from "@/lib/allowlist";
 
 const usageTableSql = `
   CREATE TABLE IF NOT EXISTS daily_generation_usage (
@@ -39,11 +38,11 @@ export async function ensureUsageTable() {
   return usageReadyPromise;
 }
 
-export function getDailyGenerationLimit(role: AccessRole) {
-  return roleFeatures[role].dailyGenerationLimit;
+export function getDailyGenerationLimit() {
+  return servicePolicy.dailyGenerationLimit;
 }
 
-export async function getDailyUsageSummary(email: string, role: AccessRole) {
+export async function getDailyUsageSummary(email: string) {
   await ensureUsageTable();
 
   const usageDate = getTodayInSeoul();
@@ -58,7 +57,7 @@ export async function getDailyUsageSummary(email: string, role: AccessRole) {
   });
 
   const used = Number(result.rows[0]?.count ?? 0);
-  const limit = getDailyGenerationLimit(role);
+  const limit = getDailyGenerationLimit();
 
   return {
     limit,
