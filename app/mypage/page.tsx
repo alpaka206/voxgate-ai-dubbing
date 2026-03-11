@@ -25,7 +25,7 @@ export default async function MyPage() {
     <AppShell
       access={access}
       currentPath="/mypage"
-      description="현재 로그인한 계정과 허용 상태, 오늘 사용량, 업로드 한도를 확인할 수 있는 계정 페이지입니다."
+      description="현재 로그인한 계정 정보와 접근 상태, 오늘 사용량, 업로드 한도를 확인할 수 있는 계정 페이지입니다."
       title="마이페이지"
     >
       <div className="grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
@@ -54,7 +54,11 @@ export default async function MyPage() {
               <div>
                 <p className="text-sm text-muted">권한</p>
                 <p className="text-lg font-semibold text-foreground">
-                  {access.role === "manager" ? "manager" : access.role === "member" ? "member" : "미지정"}
+                  {access.role === "manager"
+                    ? "관리자"
+                    : access.role === "member"
+                      ? "사용 계정"
+                      : "미지정"}
                 </p>
               </div>
               <div>
@@ -83,7 +87,7 @@ export default async function MyPage() {
                 허용 목록을 직접 관리할 수 있습니다
               </h2>
               <p className="mt-3 text-sm leading-6 text-muted">
-                평가 계정과 테스트 계정을 허용 목록에 추가하고 현재 등록된 목록을 확인할 수 있습니다.
+                새 사용자를 허용 목록에 추가하고, 현재 등록된 계정과 대기 중인 요청을 함께 확인할 수 있습니다.
               </p>
               <Link
                 href="/allowlist"

@@ -28,7 +28,7 @@ export function AccessRequestCard({
           </h2>
           <p className="text-sm leading-6 text-muted">
             {canManageAllowlist
-              ? "manager 권한 계정입니다. 허용 목록 페이지에서 대기 중인 요청을 member로 승인하거나 평가 계정을 직접 추가할 수 있습니다."
+              ? "관리자 권한이 연결된 계정입니다. 허용 목록 페이지에서 대기 중인 요청을 승인하거나 새 사용자를 직접 추가할 수 있습니다."
               : "허용 목록에 등록된 계정입니다. 스튜디오에서 바로 더빙을 시작하거나 마이페이지에서 현재 상태를 확인해 보세요."}
           </p>
         </div>
@@ -56,7 +56,7 @@ export function AccessRequestCard({
         </h2>
         <p className="text-sm leading-6 text-muted">
           {isPending
-            ? "manager 계정이 요청을 확인하면 member 권한으로 승인할 수 있습니다. 승인 후에는 스튜디오를 바로 사용할 수 있습니다."
+            ? "관리자 계정이 요청을 확인하면 바로 사용할 수 있도록 승인됩니다. 승인 후에는 스튜디오를 바로 열 수 있습니다."
             : "readvox는 허용 목록에 등록된 계정만 스튜디오를 사용할 수 있습니다. 아래 버튼으로 허용 신청을 보낼 수 있습니다."}
         </p>
       </div>
@@ -71,7 +71,7 @@ export function AccessRequestCard({
       <div className="mt-5">
         {isPending ? (
           <div className="rounded-[1.25rem] border border-border bg-white px-4 py-4 text-sm leading-6 text-muted">
-            현재 신청 상태: manager 승인 대기 중
+            현재 신청 상태: 관리자 확인 대기 중
           </div>
         ) : (
           <AccessRequestButton />

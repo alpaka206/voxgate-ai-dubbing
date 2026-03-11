@@ -23,7 +23,7 @@ export default async function AllowlistPage() {
     <AppShell
       access={access}
       currentPath="/allowlist"
-      description="대기 중인 허용 요청을 확인하고 member 권한으로 승인하거나, 평가 계정과 테스트 계정을 직접 허용 목록에 추가할 수 있습니다."
+      description="대기 중인 허용 요청을 확인하고 새 사용자를 바로 사용 가능한 상태로 추가할 수 있는 관리 화면입니다."
       title="허용 목록 관리"
     >
       <AllowlistManager entries={entries} pendingRequests={pendingRequests} />
