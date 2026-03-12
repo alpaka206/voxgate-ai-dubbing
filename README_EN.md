@@ -11,10 +11,9 @@ readvox is a web app for turning uploaded audio or video into dubbed output in a
 - One-line intro:
   Extract audio from uploaded media, transcribe it, translate it, and return dubbed output in one flow.
 
-## 30s Walkthrough
+## Preview video
 
-- 30-second GIF/video link:
-- Preview:
+- Preview video: [readvox-preview.mp4](./public/readvox-preview.mp4)
 
 ## Core Features
 

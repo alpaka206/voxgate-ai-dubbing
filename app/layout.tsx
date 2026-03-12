@@ -35,7 +35,7 @@ export const metadata: Metadata = {
     url: siteUrl,
     images: [
       {
-        url: "/readvox-mark.svg",
+        url: "/readvox-og.svg",
         width: 1200,
         height: 630,
         alt: "readvox AI dubbing workspace",
@@ -46,7 +46,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "readvox",
     description,
-    images: ["/readvox-mark.svg"],
+    images: ["/readvox-og.svg"],
   },
   icons: {
     icon: "/readvox-mark.svg",
