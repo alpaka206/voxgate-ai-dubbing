@@ -1,14 +1,21 @@
+import { del, head, put } from "@vercel/blob";
 import { NextResponse } from "next/server";
 
 import { getAccessState } from "@/lib/auth";
 import {
+  buildOutputBlobPath,
+  getBlobAccess,
+  getFileNameFromPathname,
+  isAllowedUploadPath,
+  shouldUseMultipartUpload,
+} from "@/lib/blob";
+import {
   buildDubbedVideo,
   cleanupWorkspace,
   extractAudioTrack,
-  getMaxUploadBytes,
   getMediaDurationSeconds,
   readFileBuffer,
-  storeUploadedFile,
+  storeUploadedBuffer,
   writeBufferToFile,
 } from "@/lib/media";
 import {
@@ -24,7 +31,7 @@ import { getDailyUsageSummary, incrementDailyUsage } from "@/lib/usage";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 function jsonResponse(body: Record<string, unknown>, status: number) {
   return NextResponse.json(body, {
@@ -41,11 +48,17 @@ function getOutputFileName(kind: "audio" | "video", languageCode: string) {
     : `readvox-dubbed-${languageCode}.mp3`;
 }
 
+type DubRequestBody = {
+  mediaUrl?: string;
+  targetLanguage?: string;
+  voiceId?: string;
+};
+
 export async function POST(request: Request) {
   const access = await getAccessState();
 
   if (!access.session) {
-    return jsonResponse({ error: "로그인 후 이용할 수 있습니다." }, 401);
+    return jsonResponse({ error: "로그인이 필요합니다." }, 401);
   }
 
   if (!access.email) {
@@ -68,17 +81,14 @@ export async function POST(request: Request) {
     );
   }
 
-  const formData = await request.formData().catch(() => null);
-  const media = formData?.get("media");
+  const body = (await request.json().catch(() => null)) as DubRequestBody | null;
+  const mediaUrl = typeof body?.mediaUrl === "string" ? body.mediaUrl.trim() : "";
   const targetLanguageCode =
-    typeof formData?.get("targetLanguage") === "string"
-      ? String(formData.get("targetLanguage")).trim()
-      : "";
-  const voiceId =
-    typeof formData?.get("voiceId") === "string" ? String(formData.get("voiceId")).trim() : "";
+    typeof body?.targetLanguage === "string" ? body.targetLanguage.trim() : "";
+  const voiceId = typeof body?.voiceId === "string" ? body.voiceId.trim() : "";
 
-  if (!(media instanceof File)) {
-    return jsonResponse({ error: "더빙할 오디오 또는 비디오 파일을 선택해 주세요." }, 400);
+  if (!mediaUrl) {
+    return jsonResponse({ error: "업로드한 파일 정보를 다시 확인해 주세요." }, 400);
   }
 
   if (!voiceId || !isValidVoiceId(voiceId)) {
@@ -92,9 +102,31 @@ export async function POST(request: Request) {
   }
 
   let workspaceDir = "";
+  let inputBlobUrl = "";
 
   try {
-    const storedUpload = await storeUploadedFile(media);
+    const mediaMetadata = await head(mediaUrl);
+
+    if (!isAllowedUploadPath(mediaMetadata.pathname, access.email)) {
+      return jsonResponse({ error: "내 계정으로 업로드한 파일만 더빙할 수 있습니다." }, 400);
+    }
+
+    inputBlobUrl = mediaMetadata.url;
+
+    const uploadResponse = await fetch(mediaMetadata.url, {
+      cache: "no-store",
+    });
+
+    if (!uploadResponse.ok) {
+      throw new Error("업로드한 파일을 다시 불러오지 못했습니다.");
+    }
+
+    const mediaBuffer = Buffer.from(await uploadResponse.arrayBuffer());
+    const storedUpload = await storeUploadedBuffer({
+      buffer: mediaBuffer,
+      fileName: getFileNameFromPathname(mediaMetadata.pathname),
+      mimeType: mediaMetadata.contentType,
+    });
     workspaceDir = storedUpload.workspaceDir;
 
     const durationSeconds = await getMediaDurationSeconds(storedUpload.inputPath);
@@ -124,7 +156,7 @@ export async function POST(request: Request) {
       return jsonResponse(
         {
           error:
-            "업로드한 파일에서 음성을 인식하지 못했습니다. 말소리가 포함된 파일인지 확인해 주세요.",
+            "업로드한 파일에서 음성을 인식하지 못했습니다. 목소리가 포함된 파일인지 확인해 주세요.",
         },
         400,
       );
@@ -164,25 +196,40 @@ export async function POST(request: Request) {
         outputKind = "video";
         contentType = "video/mp4";
       } catch (error) {
-        console.error("비디오 결과물 합성에 실패해 오디오 결과로 대체합니다.", error);
+        console.error("비디오 합성에 실패해 오디오 결과로 대체합니다.", error);
       }
     }
 
+    const outputFileName = getOutputFileName(outputKind, targetLanguage.code);
+    const outputBlob = await put(
+      buildOutputBlobPath(access.email, outputFileName),
+      outputBuffer,
+      {
+        access: getBlobAccess(),
+        addRandomSuffix: false,
+        contentType,
+        multipart: shouldUseMultipartUpload(outputBuffer.byteLength),
+      },
+    );
+
     await incrementDailyUsage(access.email);
 
-    return new NextResponse(new Uint8Array(outputBuffer), {
-      status: 200,
-      headers: {
-        "Cache-Control": "no-store",
-        "Content-Disposition": `attachment; filename="${getOutputFileName(outputKind, targetLanguage.code)}"`,
-        "Content-Type": contentType,
-        "X-Readvox-Max-Upload-Bytes": String(getMaxUploadBytes()),
-        "X-Readvox-Output-Kind": outputKind,
+    return jsonResponse(
+      {
+        downloadUrl: outputBlob.downloadUrl,
+        fileName: outputFileName,
+        kind: outputKind,
+        url: outputBlob.url,
       },
-    });
+      200,
+    );
   } catch (error) {
     if (error instanceof Error) {
       const message = error.message;
+
+      if (message.includes("BLOB_READ_WRITE_TOKEN") || message.includes("Vercel Blob")) {
+        return jsonResponse({ error: "Vercel Blob 설정을 확인해 주세요." }, 500);
+      }
 
       if (
         message.includes("MB") ||
@@ -214,5 +261,11 @@ export async function POST(request: Request) {
     return jsonResponse({ error: fallbackMessage }, 502);
   } finally {
     await cleanupWorkspace(workspaceDir);
+
+    if (inputBlobUrl) {
+      await del(inputBlobUrl).catch((error) => {
+        console.error("업로드한 Blob 파일을 정리하지 못했습니다.", error);
+      });
+    }
   }
 }

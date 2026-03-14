@@ -46,6 +46,7 @@ export default async function StudioPage() {
         maxMediaDurationSeconds={access.maxMediaDurationSeconds}
         maxUploadBytes={getMaxUploadBytes()}
         targetLanguages={targetLanguages}
+        userEmail={access.email}
         usageLimit={usageSummary.limit}
         voices={voices}
       />
