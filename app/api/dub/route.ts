@@ -29,7 +29,7 @@ import {
   storeUploadedBuffer,
   writeBufferToFile,
 } from "@/lib/media";
-import { translateText } from "@/lib/translation";
+import { translateSegments } from "@/lib/translation";
 import { getDailyUsageSummary, incrementDailyUsage } from "@/lib/usage";
 
 export const dynamic = "force-dynamic";
@@ -194,14 +194,11 @@ export async function POST(request: Request) {
       Math.max(sourceAudioDurationSeconds, durationSeconds ?? 0),
     );
 
-    const segmentPlans = await mapWithConcurrency(segments, 2, async (segment) => ({
-      ...segment,
-      translatedText: await translateText({
-        sourceLanguageCode: transcription.detectedLanguageCode,
-        targetLanguage,
-        text: segment.text,
-      }),
-    }));
+    const segmentPlans = await translateSegments({
+      sourceLanguageCode: transcription.detectedLanguageCode,
+      segments,
+      targetLanguage,
+    });
 
     const segmentAudioPlans = await mapWithConcurrency(segmentPlans, 2, async (segment) => {
       const segmentAudioBuffer = await generateSpeech({
@@ -285,6 +282,15 @@ export async function POST(request: Request) {
       }
 
       if (
+        message.includes("quota") ||
+        message.includes("rate limit") ||
+        message.includes("Too Many Requests") ||
+        message.includes("retry in")
+      ) {
+        return jsonResponse({ error: message }, 429);
+      }
+
+      if (
         message.includes("MB") ||
         message.includes("오디오") ||
         message.includes("비디오") ||
@@ -295,7 +301,6 @@ export async function POST(request: Request) {
         message.includes("ElevenLabs") ||
         message.includes("voice") ||
         message.includes("model") ||
-        message.includes("quota") ||
         message.includes("language")
       ) {
         return jsonResponse({ error: message }, 400);
