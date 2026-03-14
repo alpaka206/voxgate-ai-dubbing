@@ -1,6 +1,13 @@
 import type { Metadata, Viewport } from "next";
+import { Roboto } from "next/font/google";
 
 import "./globals.css";
+
+const googleButtonFont = Roboto({
+  subsets: ["latin"],
+  variable: "--font-google-signin",
+  weight: "500",
+});
 
 const siteUrl = "https://readvox.vercel.app";
 const description =
@@ -65,7 +72,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ko">
-      <body>{children}</body>
+      <body className={googleButtonFont.variable}>{children}</body>
     </html>
   );
 }
