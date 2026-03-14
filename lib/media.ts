@@ -16,9 +16,15 @@ export type StoredUpload = {
   workspaceDir: string;
 };
 
+export type TimedAudioSegment = {
+  path: string;
+  startSeconds: number;
+};
+
 const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 const audioExtensions = new Set([".mp3", ".wav", ".m4a", ".aac", ".ogg", ".webm"]);
 const videoExtensions = new Set([".mp4", ".mov", ".webm", ".mkv"]);
+const MIN_AUDIO_DURATION_SECONDS = 0.2;
 
 function normalizeBundledPath(binaryPath: string) {
   const normalized = binaryPath.replaceAll("/", path.sep);
@@ -136,42 +142,6 @@ async function persistUploadBuffer({
   } satisfies StoredUpload;
 }
 
-export function getMaxUploadBytes() {
-  return MAX_UPLOAD_BYTES;
-}
-
-export async function createPipelineWorkspace() {
-  return mkdtemp(path.join(tmpdir(), "readvox-"));
-}
-
-export async function storeUploadedFile(file: File) {
-  const buffer = Buffer.from(await file.arrayBuffer());
-
-  return persistUploadBuffer({
-    buffer,
-    fileName: file.name,
-    mimeType: file.type || "application/octet-stream",
-    size: file.size,
-  });
-}
-
-export async function storeUploadedBuffer({
-  buffer,
-  fileName,
-  mimeType,
-}: {
-  buffer: Buffer;
-  fileName: string;
-  mimeType: string;
-}) {
-  return persistUploadBuffer({
-    buffer,
-    fileName,
-    mimeType,
-    size: buffer.byteLength,
-  });
-}
-
 async function runFfmpeg(args: string[], allowNonZeroExit = false) {
   const binary = getFfmpegBinary();
 
@@ -215,6 +185,60 @@ function parseDuration(stderr: string) {
   return hours * 3600 + minutes * 60 + seconds;
 }
 
+function buildAtempoFilter(speedRatio: number) {
+  const filters: string[] = [];
+  let remaining = speedRatio;
+
+  while (remaining > 2) {
+    filters.push("atempo=2");
+    remaining /= 2;
+  }
+
+  while (remaining < 0.5) {
+    filters.push("atempo=0.5");
+    remaining /= 0.5;
+  }
+
+  filters.push(`atempo=${remaining.toFixed(4)}`);
+  return filters.join(",");
+}
+
+export function getMaxUploadBytes() {
+  return MAX_UPLOAD_BYTES;
+}
+
+export async function createPipelineWorkspace() {
+  return mkdtemp(path.join(tmpdir(), "readvox-"));
+}
+
+export async function storeUploadedFile(file: File) {
+  const buffer = Buffer.from(await file.arrayBuffer());
+
+  return persistUploadBuffer({
+    buffer,
+    fileName: file.name,
+    mimeType: file.type || "application/octet-stream",
+    size: file.size,
+  });
+}
+
+export async function storeUploadedBuffer({
+  buffer,
+  fileName,
+  mimeType,
+}: {
+  buffer: Buffer;
+  fileName: string;
+  mimeType: string;
+}) {
+  return persistUploadBuffer({
+    buffer,
+    fileName,
+    mimeType,
+    size: buffer.byteLength,
+  });
+}
+
 export async function getMediaDurationSeconds(inputPath: string) {
   const { stderr } = await runFfmpeg(["-i", inputPath, "-f", "null", "-"], true);
   return parseDuration(stderr);
@@ -250,19 +274,144 @@ export async function writeBufferToFile(
   return outputPath;
 }
 
-export async function buildDubbedVideo(
-  inputVideoPath: string,
-  dubbedAudioPath: string,
-  workspaceDir: string,
-) {
-  const outputPath = path.join(workspaceDir, "dubbed-video.mp4");
+export async function fitAudioToDuration(options: {
+  fileName: string;
+  inputPath: string;
+  targetDurationSeconds: number;
+  workspaceDir: string;
+}) {
+  const sourceDurationSeconds = await getMediaDurationSeconds(options.inputPath);
+
+  if (!sourceDurationSeconds) {
+    return options.inputPath;
+  }
+
+  const targetDurationSeconds = Math.max(
+    options.targetDurationSeconds,
+    MIN_AUDIO_DURATION_SECONDS,
+  );
+  const speedRatio = sourceDurationSeconds / targetDurationSeconds;
+
+  if (Math.abs(1 - speedRatio) <= 0.03) {
+    return options.inputPath;
+  }
+
+  const outputPath = path.join(options.workspaceDir, options.fileName);
+  const filter = `${buildAtempoFilter(speedRatio)},atrim=0:${targetDurationSeconds.toFixed(3)}`;
 
   await runFfmpeg([
     "-y",
     "-i",
-    inputVideoPath,
+    options.inputPath,
+    "-filter:a",
+    filter,
+    "-ar",
+    "44100",
+    "-ac",
+    "2",
+    "-c:a",
+    "libmp3lame",
+    outputPath,
+  ]);
+
+  return outputPath;
+}
+
+export async function createSilentAudioTrack(options: {
+  durationSeconds: number;
+  fileName: string;
+  workspaceDir: string;
+}) {
+  const outputPath = path.join(options.workspaceDir, options.fileName);
+
+  await runFfmpeg([
+    "-y",
+    "-f",
+    "lavfi",
     "-i",
-    dubbedAudioPath,
+    "anullsrc=r=44100:cl=stereo",
+    "-t",
+    Math.max(options.durationSeconds, MIN_AUDIO_DURATION_SECONDS).toFixed(3),
+    "-c:a",
+    "libmp3lame",
+    outputPath,
+  ]);
+
+  return outputPath;
+}
+
+export async function buildTimedDubbedAudio(options: {
+  durationSeconds: number;
+  segments: TimedAudioSegment[];
+  workspaceDir: string;
+}) {
+  const outputPath = path.join(options.workspaceDir, "dubbed-audio-timed.mp3");
+  const baseTrackPath = await createSilentAudioTrack({
+    durationSeconds: options.durationSeconds,
+    fileName: "dubbed-audio-base.mp3",
+    workspaceDir: options.workspaceDir,
+  });
+
+  if (options.segments.length === 0) {
+    return baseTrackPath;
+  }
+
+  const args = ["-y", "-i", baseTrackPath];
+
+  for (const segment of options.segments) {
+    args.push("-i", segment.path);
+  }
+
+  const delayedLabels: string[] = [];
+  const filterParts: string[] = [];
+
+  options.segments.forEach((segment, index) => {
+    const inputIndex = index + 1;
+    const delayMilliseconds = Math.max(Math.round(segment.startSeconds * 1000), 0);
+    const delayedLabel = `delayed${inputIndex}`;
+
+    delayedLabels.push(`[${delayedLabel}]`);
+    filterParts.push(
+      `[${inputIndex}:a]adelay=${delayMilliseconds}:all=1[${delayedLabel}]`,
+    );
+  });
+
+  filterParts.push(
+    `[0:a]${delayedLabels.join("")}amix=inputs=${options.segments.length + 1}:duration=first:dropout_transition=0,atrim=0:${Math.max(options.durationSeconds, MIN_AUDIO_DURATION_SECONDS).toFixed(3)}[outa]`,
+  );
+
+  await runFfmpeg([
+    ...args,
+    "-filter_complex",
+    filterParts.join(";"),
+    "-map",
+    "[outa]",
+    "-ar",
+    "44100",
+    "-ac",
+    "2",
+    "-c:a",
+    "libmp3lame",
+    outputPath,
+  ]);
+
+  return outputPath;
+}
+
+export async function buildDubbedVideo(options: {
+  durationSeconds: number;
+  dubbedAudioPath: string;
+  inputVideoPath: string;
+  workspaceDir: string;
+}) {
+  const outputPath = path.join(options.workspaceDir, "dubbed-video.mp4");
+
+  await runFfmpeg([
+    "-y",
+    "-i",
+    options.inputVideoPath,
+    "-i",
+    options.dubbedAudioPath,
     "-map",
     "0:v:0",
     "-map",
@@ -271,7 +420,8 @@ export async function buildDubbedVideo(
     "copy",
     "-c:a",
     "aac",
-    "-shortest",
+    "-t",
+    Math.max(options.durationSeconds, MIN_AUDIO_DURATION_SECONDS).toFixed(3),
     outputPath,
   ]);
 

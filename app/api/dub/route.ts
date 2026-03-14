@@ -9,15 +9,7 @@ import {
   isAllowedUploadPath,
   shouldUseMultipartUpload,
 } from "@/lib/blob";
-import {
-  buildDubbedVideo,
-  cleanupWorkspace,
-  extractAudioTrack,
-  getMediaDurationSeconds,
-  readFileBuffer,
-  storeUploadedBuffer,
-  writeBufferToFile,
-} from "@/lib/media";
+import { createTranscriptSegments } from "@/lib/dubbing";
 import {
   generateSpeech,
   getSpeechGenerationErrorMessage,
@@ -26,12 +18,29 @@ import {
   transcribeAudio,
 } from "@/lib/elevenlabs";
 import { getTargetLanguageByCode } from "@/lib/languages";
-import { translateText } from "@/lib/translation";
+import {
+  buildDubbedVideo,
+  buildTimedDubbedAudio,
+  cleanupWorkspace,
+  extractAudioTrack,
+  fitAudioToDuration,
+  getMediaDurationSeconds,
+  readFileBuffer,
+  storeUploadedBuffer,
+  writeBufferToFile,
+} from "@/lib/media";
+import { translateSegments } from "@/lib/translation";
 import { getDailyUsageSummary, incrementDailyUsage } from "@/lib/usage";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const maxDuration = 300;
+
+type DubRequestBody = {
+  mediaUrl?: string;
+  targetLanguage?: string;
+  voiceId?: string;
+};
 
 function jsonResponse(body: Record<string, unknown>, status: number) {
   return NextResponse.json(body, {
@@ -48,11 +57,27 @@ function getOutputFileName(kind: "audio" | "video", languageCode: string) {
     : `readvox-dubbed-${languageCode}.mp3`;
 }
 
-type DubRequestBody = {
-  mediaUrl?: string;
-  targetLanguage?: string;
-  voiceId?: string;
-};
+async function mapWithConcurrency<TItem, TResult>(
+  items: TItem[],
+  concurrency: number,
+  mapper: (item: TItem, index: number) => Promise<TResult>,
+) {
+  const results = new Array<TResult>(items.length);
+  let cursor = 0;
+
+  async function worker() {
+    while (cursor < items.length) {
+      const index = cursor;
+      cursor += 1;
+      results[index] = await mapper(items[index], index);
+    }
+  }
+
+  const workerCount = Math.max(1, Math.min(concurrency, items.length));
+  await Promise.all(Array.from({ length: workerCount }, () => worker()));
+
+  return results;
+}
 
 export async function POST(request: Request) {
   const access = await getAccessState();
@@ -145,6 +170,8 @@ export async function POST(request: Request) {
       storedUpload.workspaceDir,
     );
     const sourceAudioBuffer = await readFileBuffer(sourceAudioPath);
+    const sourceAudioDurationSeconds =
+      (await getMediaDurationSeconds(sourceAudioPath)) ?? durationSeconds ?? 0;
 
     const transcription = await transcribeAudio({
       buffer: sourceAudioBuffer,
@@ -162,37 +189,59 @@ export async function POST(request: Request) {
       );
     }
 
-    const translatedText = await translateText({
-      sourceLanguageCode: transcription.detectedLanguageCode,
-      targetLanguage,
-      text: transcription.text,
-    });
-
-    const dubbedAudioBuffer = await generateSpeech({
-      languageCode: targetLanguage.code,
-      text: translatedText,
-      voiceId,
-    });
-
-    const dubbedAudioPath = await writeBufferToFile(
-      storedUpload.workspaceDir,
-      "dubbed-audio.mp3",
-      dubbedAudioBuffer,
+    const segments = createTranscriptSegments(
+      transcription,
+      Math.max(sourceAudioDurationSeconds, durationSeconds ?? 0),
     );
 
-    let outputBuffer = dubbedAudioBuffer;
+    const segmentPlans = await translateSegments({
+      sourceLanguageCode: transcription.detectedLanguageCode,
+      segments,
+      targetLanguage,
+    });
+
+    const segmentAudioPlans = await mapWithConcurrency(segmentPlans, 2, async (segment) => {
+      const segmentAudioBuffer = await generateSpeech({
+        languageCode: targetLanguage.code,
+        text: segment.translatedText,
+        voiceId,
+      });
+      const rawAudioPath = await writeBufferToFile(
+        storedUpload.workspaceDir,
+        `dubbed-segment-${segment.index}.mp3`,
+        segmentAudioBuffer,
+      );
+      const fittedAudioPath = await fitAudioToDuration({
+        fileName: `dubbed-segment-${segment.index}-timed.mp3`,
+        inputPath: rawAudioPath,
+        targetDurationSeconds: Math.max(segment.endSeconds - segment.startSeconds, 0.35),
+        workspaceDir: storedUpload.workspaceDir,
+      });
+
+      return {
+        path: fittedAudioPath,
+        startSeconds: segment.startSeconds,
+      };
+    });
+
+    const dubbedAudioPath = await buildTimedDubbedAudio({
+      durationSeconds: Math.max(sourceAudioDurationSeconds, durationSeconds ?? 0, 0.35),
+      segments: segmentAudioPlans,
+      workspaceDir: storedUpload.workspaceDir,
+    });
+
+    let outputPath = dubbedAudioPath;
     let outputKind: "audio" | "video" = "audio";
     let contentType = "audio/mpeg";
 
     if (storedUpload.kind === "video") {
       try {
-        const dubbedVideoPath = await buildDubbedVideo(
-          storedUpload.inputPath,
+        outputPath = await buildDubbedVideo({
+          durationSeconds: Math.max(durationSeconds ?? sourceAudioDurationSeconds, 0.35),
           dubbedAudioPath,
-          storedUpload.workspaceDir,
-        );
-
-        outputBuffer = await readFileBuffer(dubbedVideoPath);
+          inputVideoPath: storedUpload.inputPath,
+          workspaceDir: storedUpload.workspaceDir,
+        });
         outputKind = "video";
         contentType = "video/mp4";
       } catch (error) {
@@ -200,6 +249,7 @@ export async function POST(request: Request) {
       }
     }
 
+    const outputBuffer = await readFileBuffer(outputPath);
     const outputFileName = getOutputFileName(outputKind, targetLanguage.code);
     const outputBlob = await put(
       buildOutputBlobPath(access.email, outputFileName),
@@ -232,6 +282,15 @@ export async function POST(request: Request) {
       }
 
       if (
+        message.includes("quota") ||
+        message.includes("rate limit") ||
+        message.includes("Too Many Requests") ||
+        message.includes("retry in")
+      ) {
+        return jsonResponse({ error: message }, 429);
+      }
+
+      if (
         message.includes("MB") ||
         message.includes("오디오") ||
         message.includes("비디오") ||
@@ -242,7 +301,6 @@ export async function POST(request: Request) {
         message.includes("ElevenLabs") ||
         message.includes("voice") ||
         message.includes("model") ||
-        message.includes("quota") ||
         message.includes("language")
       ) {
         return jsonResponse({ error: message }, 400);
