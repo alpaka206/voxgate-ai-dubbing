@@ -79,6 +79,7 @@ npm run dev
 - `AUTH_GOOGLE_SECRET`
 - `TURSO_DATABASE_URL`
 - `TURSO_AUTH_TOKEN`
+- `BLOB_READ_WRITE_TOKEN`
 - `ELEVENLABS_API_KEY`
 - `ELEVENLABS_MODEL_ID`
 - `ELEVENLABS_STT_MODEL_ID`
@@ -143,3 +144,10 @@ npm run lint
 npm run build
 npm run db:seed
 ```
+
+## Vercel Blob 업로드 전환
+
+- 배포 환경에서는 브라우저가 `/api/uploads`를 통해 Vercel Blob으로 파일을 직접 업로드하고, `/api/dub`에는 Blob URL과 더빙 설정만 전달합니다.
+- 입력 원본은 더빙 처리 후 Blob에서 삭제하고, 결과 MP3/MP4는 Blob에 저장한 뒤 미리보기 URL과 다운로드 URL만 반환합니다.
+- 이 구조를 사용하려면 Vercel 프로젝트에 Blob 스토어를 연결하고 `BLOB_READ_WRITE_TOKEN` 환경 변수를 설정해야 합니다.
+- 현재 앱 레벨 업로드 제한은 `50MB`이며, 더빙 함수 실행 시간은 배포 플랜의 함수 시간 제한 영향을 받습니다.
