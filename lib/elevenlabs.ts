@@ -4,9 +4,18 @@ export type VoiceOption = {
   name: string;
 };
 
+export type TranscriptionWord = {
+  end: number;
+  speakerId: string | null;
+  start: number;
+  text: string;
+  type: string;
+};
+
 export type TranscriptionResult = {
   detectedLanguageCode: string | null;
   text: string;
+  words: TranscriptionWord[];
 };
 
 const ELEVENLABS_API_URL = "https://api.elevenlabs.io/v1";
@@ -126,6 +135,7 @@ export async function transcribeAudio(input: {
     input.fileName,
   );
   formData.append("model_id", process.env.ELEVENLABS_STT_MODEL_ID || DEFAULT_STT_MODEL_ID);
+  formData.append("timestamps_granularity", "word");
 
   const response = await fetch(buildElevenLabsUrl("speech-to-text"), {
     method: "POST",
@@ -143,12 +153,33 @@ export async function transcribeAudio(input: {
   const payload = (await response.json()) as {
     language_code?: string;
     text?: string;
+    words?: Array<{
+      end?: number;
+      speaker_id?: string | null;
+      start?: number;
+      text?: string;
+      type?: string;
+    }>;
   };
 
   return {
     detectedLanguageCode:
       typeof payload.language_code === "string" ? payload.language_code.toLowerCase() : null,
     text: typeof payload.text === "string" ? payload.text.trim() : "",
+    words: (payload.words ?? [])
+      .filter(
+        (word) =>
+          typeof word.text === "string" &&
+          typeof word.start === "number" &&
+          typeof word.end === "number",
+      )
+      .map((word) => ({
+        end: word.end as number,
+        speakerId: typeof word.speaker_id === "string" ? word.speaker_id : null,
+        start: word.start as number,
+        text: word.text as string,
+        type: typeof word.type === "string" ? word.type : "word",
+      })),
   } satisfies TranscriptionResult;
 }
 
@@ -164,7 +195,7 @@ export async function generateSpeech(input: {
   const text = sanitizeTextInput(input.text);
 
   if (!text) {
-    throw new Error("합성할 텍스트가 비어 있습니다.");
+    throw new Error("음성용 텍스트가 비어 있습니다.");
   }
 
   const response = await fetch(buildElevenLabsUrl(`text-to-speech/${input.voiceId}`), {
