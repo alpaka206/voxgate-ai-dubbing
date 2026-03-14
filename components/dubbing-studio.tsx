@@ -1,7 +1,13 @@
 "use client";
 
+import { upload } from "@vercel/blob/client";
 import { ChangeEvent, FormEvent, useEffect, useState } from "react";
 
+import {
+  buildUploadBlobPath,
+  getBlobAccess,
+  shouldUseMultipartUpload,
+} from "@/lib/blob";
 import { formatDurationLabel, formatFileSize } from "@/lib/display";
 import type { VoiceOption } from "@/lib/elevenlabs";
 import type { TargetLanguage } from "@/lib/languages";
@@ -13,23 +19,16 @@ type DubbingStudioProps = {
   maxUploadBytes: number;
   targetLanguages: TargetLanguage[];
   usageLimit: number;
+  userEmail: string;
   voices: VoiceOption[];
 };
 
 type ResultState = {
+  downloadUrl: string;
   fileName: string;
   kind: "audio" | "video";
   url: string;
 } | null;
-
-function readDownloadFileName(contentDisposition: string | null, fallback: string) {
-  if (!contentDisposition) {
-    return fallback;
-  }
-
-  const match = contentDisposition.match(/filename="(.+?)"/);
-  return match?.[1] ?? fallback;
-}
 
 export function DubbingStudio({
   initialError,
@@ -38,6 +37,7 @@ export function DubbingStudio({
   maxUploadBytes,
   targetLanguages,
   usageLimit,
+  userEmail,
   voices,
 }: DubbingStudioProps) {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -45,6 +45,10 @@ export function DubbingStudio({
   const [targetLanguage, setTargetLanguage] = useState(targetLanguages[0]?.code ?? "en");
   const [error, setError] = useState(initialError ?? "");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submissionPhase, setSubmissionPhase] = useState<"idle" | "uploading" | "processing">(
+    "idle",
+  );
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [result, setResult] = useState<ResultState>(null);
   const [usedCount, setUsedCount] = useState(initialUsedCount);
 
@@ -54,17 +58,13 @@ export function DubbingStudio({
     }
   }, [voiceId, voices]);
 
-  useEffect(() => {
-    return () => {
-      if (result?.url) {
-        URL.revokeObjectURL(result.url);
-      }
-    };
-  }, [result]);
-
   const remainingCount = Math.max(usageLimit - usedCount, 0);
   const canSubmit =
-    !isSubmitting && Boolean(selectedFile) && Boolean(voiceId) && Boolean(targetLanguage) && remainingCount > 0;
+    !isSubmitting &&
+    Boolean(selectedFile) &&
+    Boolean(voiceId) &&
+    Boolean(targetLanguage) &&
+    remainingCount > 0;
 
   const fileSummary = selectedFile
     ? `${selectedFile.name} / ${formatFileSize(selectedFile.size)}`
@@ -72,7 +72,18 @@ export function DubbingStudio({
 
   function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
     const nextFile = event.target.files?.[0] ?? null;
+
+    if (nextFile && nextFile.size > maxUploadBytes) {
+      setError(`현재는 ${formatFileSize(maxUploadBytes)} 이하 파일만 업로드할 수 있습니다.`);
+      setSelectedFile(null);
+      setResult(null);
+      event.target.value = "";
+      return;
+    }
+
+    setError("");
     setSelectedFile(nextFile);
+    setResult(null);
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -85,16 +96,33 @@ export function DubbingStudio({
 
     setError("");
     setIsSubmitting(true);
+    setResult(null);
+    setSubmissionPhase("uploading");
+    setUploadProgress(0);
 
     try {
-      const formData = new FormData();
-      formData.append("media", selectedFile);
-      formData.append("targetLanguage", targetLanguage);
-      formData.append("voiceId", voiceId);
+      const uploadedBlob = await upload(buildUploadBlobPath(userEmail, selectedFile.name), selectedFile, {
+        access: getBlobAccess(),
+        handleUploadUrl: "/api/uploads",
+        multipart: shouldUseMultipartUpload(selectedFile.size),
+        onUploadProgress: (progressEvent) => {
+          setUploadProgress(Math.round(progressEvent.percentage));
+        },
+      });
+
+      setUploadProgress(100);
+      setSubmissionPhase("processing");
 
       const response = await fetch("/api/dub", {
         method: "POST",
-        body: formData,
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          mediaUrl: uploadedBlob.url,
+          targetLanguage,
+          voiceId,
+        }),
       });
 
       if (!response.ok) {
@@ -102,24 +130,18 @@ export function DubbingStudio({
         throw new Error(payload?.error ?? "더빙 결과를 만들지 못했습니다.");
       }
 
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      const kind = response.headers.get("x-readvox-output-kind") === "video" ? "video" : "audio";
-      const fileName = readDownloadFileName(
-        response.headers.get("content-disposition"),
-        kind === "video" ? "readvox-dubbed-video.mp4" : "readvox-dubbed-audio.mp3",
-      );
+      const payload = (await response.json()) as {
+        downloadUrl: string;
+        fileName: string;
+        kind: "audio" | "video";
+        url: string;
+      };
 
-      setResult((currentResult) => {
-        if (currentResult?.url) {
-          URL.revokeObjectURL(currentResult.url);
-        }
-
-        return {
-          fileName,
-          kind,
-          url,
-        };
+      setResult({
+        downloadUrl: payload.downloadUrl,
+        fileName: payload.fileName,
+        kind: payload.kind,
+        url: payload.url,
       });
       setUsedCount((currentCount) => currentCount + 1);
     } catch (submissionError) {
@@ -127,6 +149,8 @@ export function DubbingStudio({
         submissionError instanceof Error ? submissionError.message : "더빙 결과를 만들지 못했습니다.",
       );
     } finally {
+      setSubmissionPhase("idle");
+      setUploadProgress(0);
       setIsSubmitting(false);
     }
   }
@@ -161,7 +185,8 @@ export function DubbingStudio({
           <div className="space-y-3">
             <span className="text-sm font-semibold text-foreground">파일 업로드</span>
             <p className="text-sm leading-6 text-muted">
-              오디오 또는 비디오 파일을 올리면 음성을 추출한 뒤 전사, 번역, 더빙 음성 생성까지 한 번에 처리합니다.
+              오디오 또는 비디오 파일을 올리면 음성 추출부터 전사, 번역, 더빙 음성 생성까지 한 번에
+              처리합니다.
             </p>
 
             <label className="flex cursor-pointer flex-col gap-3 rounded-[1.5rem] border border-dashed border-[#f1c8b5] bg-[#fff8f3] px-5 py-5 transition hover:border-accent hover:bg-[#fff4ec]">
@@ -172,7 +197,8 @@ export function DubbingStudio({
                 지원 형식: MP3, WAV, M4A, AAC, OGG, WEBM, MP4, MOV, MKV
               </span>
               <span className="text-sm leading-6 text-muted">
-                배포 환경에서는 {formatFileSize(maxUploadBytes)} 이하의 짧은 샘플 파일을 권장합니다.
+                브라우저가 Vercel Blob으로 직접 업로드하므로 현재는 {formatFileSize(maxUploadBytes)} 이하
+                파일까지 처리할 수 있습니다.
               </span>
               <input
                 accept="audio/*,video/*,.mp3,.wav,.m4a,.aac,.ogg,.webm,.mp4,.mov,.mkv"
@@ -183,7 +209,7 @@ export function DubbingStudio({
             </label>
 
             <div className="rounded-[1.25rem] border border-border bg-[#fcfbf8] px-4 py-4 text-sm text-muted">
-              {fileSummary ?? "아직 선택된 파일이 없습니다."}
+              {fileSummary ?? "아직 선택한 파일이 없습니다."}
             </div>
           </div>
 
@@ -227,7 +253,8 @@ export function DubbingStudio({
           <div className="rounded-[1.5rem] bg-[linear-gradient(135deg,#fffaf5_0%,#f8fcfa_100%)] px-5 py-5">
             <p className="text-sm font-semibold text-foreground">처리 흐름</p>
             <p className="mt-2 text-sm leading-6 text-muted">
-              업로드한 파일에서 음성을 추출하고, 원문을 전사한 뒤 선택한 언어로 번역해 새로운 더빙 음성을 만듭니다.
+              업로드한 파일에서 음성을 추출하고, 원문을 전사한 뒤 선택한 언어로 번역해 새로운 더빙
+              음성을 만듭니다.
             </p>
           </div>
 
@@ -236,11 +263,13 @@ export function DubbingStudio({
             className="inline-flex h-12 items-center justify-center rounded-full bg-accent px-7 text-sm font-semibold text-white shadow-[0_16px_32px_rgba(255,127,92,0.24)] transition hover:-translate-y-0.5 hover:bg-accent-strong disabled:cursor-not-allowed disabled:border disabled:border-border disabled:bg-[#f4f4f1] disabled:text-muted disabled:shadow-none"
             disabled={!canSubmit}
           >
-            {isSubmitting
-              ? "전사 · 번역 · 더빙 생성 중..."
-              : remainingCount === 0
-                ? "오늘 사용 가능 횟수 소진"
-                : "더빙 결과 만들기"}
+            {submissionPhase === "uploading"
+              ? `파일 업로드 중... ${uploadProgress}%`
+              : submissionPhase === "processing"
+                ? "전사 · 번역 · 더빙 생성 중..."
+                : remainingCount === 0
+                  ? "오늘 사용 가능 횟수 소진"
+                  : "더빙 결과 만들기"}
           </button>
         </form>
       </div>
@@ -252,7 +281,8 @@ export function DubbingStudio({
             생성이 끝나면 여기에서 바로 확인할 수 있어요
           </h2>
           <p className="mt-3 text-sm leading-6 text-muted">
-            오디오는 플레이어로 듣고, 비디오는 화면에서 미리 본 뒤 결과 파일을 바로 내려받을 수 있습니다.
+            오디오는 플레이어로 듣고, 비디오는 화면에서 미리 본 뒤 결과 파일을 바로 내려받을 수
+            있습니다.
           </p>
         </div>
 
@@ -277,7 +307,7 @@ export function DubbingStudio({
             </div>
 
             <a
-              href={result.url}
+              href={result.downloadUrl}
               download={result.fileName}
               className="inline-flex items-center justify-center rounded-full bg-accent px-5 py-3 text-sm font-semibold text-white shadow-[0_16px_32px_rgba(255,127,92,0.22)] transition hover:-translate-y-0.5 hover:bg-accent-strong"
             >

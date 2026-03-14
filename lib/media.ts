@@ -42,7 +42,12 @@ function getFfmpegBinary() {
   const candidates = [
     ffmpegPath,
     normalizeBundledPath(ffmpegPath),
-    path.join(process.cwd(), "node_modules", "ffmpeg-static", process.platform === "win32" ? "ffmpeg.exe" : "ffmpeg"),
+    path.join(
+      process.cwd(),
+      "node_modules",
+      "ffmpeg-static",
+      process.platform === "win32" ? "ffmpeg.exe" : "ffmpeg",
+    ),
   ];
 
   const binary = candidates.find((candidate) => existsSync(candidate));
@@ -81,6 +86,56 @@ function detectMediaKind(fileName: string, mimeType: string) {
   return null;
 }
 
+function validateUpload(fileName: string, mimeType: string, size: number) {
+  if (size <= 0) {
+    throw new Error("업로드할 파일을 다시 선택해 주세요.");
+  }
+
+  if (size > MAX_UPLOAD_BYTES) {
+    throw new Error("현재는 50MB 이하 파일만 업로드할 수 있습니다.");
+  }
+
+  const safeFileName = sanitizeFileName(fileName);
+  const safeMimeType = mimeType || "application/octet-stream";
+  const kind = detectMediaKind(safeFileName, safeMimeType);
+
+  if (!kind) {
+    throw new Error("오디오 또는 비디오 파일만 업로드할 수 있습니다.");
+  }
+
+  return {
+    fileName: safeFileName,
+    kind,
+    mimeType: safeMimeType,
+  };
+}
+
+async function persistUploadBuffer({
+  buffer,
+  fileName,
+  mimeType,
+  size,
+}: {
+  buffer: Buffer;
+  fileName: string;
+  mimeType: string;
+  size: number;
+}) {
+  const validated = validateUpload(fileName, mimeType, size);
+  const workspaceDir = await createPipelineWorkspace();
+  const inputPath = path.join(workspaceDir, validated.fileName);
+
+  await writeFile(inputPath, buffer);
+
+  return {
+    fileName: validated.fileName,
+    inputPath,
+    kind: validated.kind,
+    mimeType: validated.mimeType,
+    workspaceDir,
+  } satisfies StoredUpload;
+}
+
 export function getMaxUploadBytes() {
   return MAX_UPLOAD_BYTES;
 }
@@ -90,35 +145,31 @@ export async function createPipelineWorkspace() {
 }
 
 export async function storeUploadedFile(file: File) {
-  if (file.size <= 0) {
-    throw new Error("업로드할 파일을 다시 선택해 주세요.");
-  }
-
-  if (file.size > MAX_UPLOAD_BYTES) {
-    throw new Error("현재는 50MB 이하 파일만 업로드할 수 있습니다.");
-  }
-
-  const fileName = sanitizeFileName(file.name);
-  const mimeType = file.type || "application/octet-stream";
-  const kind = detectMediaKind(fileName, mimeType);
-
-  if (!kind) {
-    throw new Error("오디오 또는 비디오 파일만 업로드할 수 있습니다.");
-  }
-
-  const workspaceDir = await createPipelineWorkspace();
-  const inputPath = path.join(workspaceDir, fileName);
   const buffer = Buffer.from(await file.arrayBuffer());
 
-  await writeFile(inputPath, buffer);
+  return persistUploadBuffer({
+    buffer,
+    fileName: file.name,
+    mimeType: file.type || "application/octet-stream",
+    size: file.size,
+  });
+}
 
-  return {
+export async function storeUploadedBuffer({
+  buffer,
+  fileName,
+  mimeType,
+}: {
+  buffer: Buffer;
+  fileName: string;
+  mimeType: string;
+}) {
+  return persistUploadBuffer({
+    buffer,
     fileName,
-    inputPath,
-    kind,
     mimeType,
-    workspaceDir,
-  } satisfies StoredUpload;
+    size: buffer.byteLength,
+  });
 }
 
 async function runFfmpeg(args: string[], allowNonZeroExit = false) {
