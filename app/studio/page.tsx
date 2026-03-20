@@ -37,7 +37,7 @@ export default async function StudioPage() {
     <AppShell
       access={access}
       currentPath="/studio"
-      description="오디오나 비디오 파일을 업로드하면 음성 추출, 전사, 번역, 타깃 언어 더빙까지 한 번에 처리할 수 있습니다."
+      description="오디오나 비디오 파일을 올리면 브라우저가 업로드용 클립이나 모바일용 압축본을 먼저 준비하고, 서버에서 음성 추출, 전사, 번역, 타깃 언어 더빙까지 한 번에 처리합니다."
       title="스튜디오"
     >
       <DubbingStudio

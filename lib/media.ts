@@ -6,6 +6,8 @@ import path from "path";
 
 import ffmpegPath from "ffmpeg-static";
 
+import { MAX_UPLOAD_BYTES } from "@/lib/media-policy";
+
 export type MediaKind = "audio" | "video";
 
 export type StoredUpload = {
@@ -21,7 +23,6 @@ export type TimedAudioSegment = {
   startSeconds: number;
 };
 
-const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 const audioExtensions = new Set([".mp3", ".wav", ".m4a", ".aac", ".ogg", ".webm"]);
 const videoExtensions = new Set([".mp4", ".mov", ".webm", ".mkv"]);
 const MIN_AUDIO_DURATION_SECONDS = 0.2;

@@ -6,6 +6,7 @@ import { AppShell } from "@/components/app-shell";
 import { PageNotice } from "@/components/page-notice";
 import { getAccessState } from "@/lib/auth";
 import { formatDurationLabel } from "@/lib/display";
+import { CLIENT_UPLOAD_CLIP_DURATION_SECONDS } from "@/lib/media-policy";
 import { getDailyUsageSummary } from "@/lib/usage";
 
 type DashboardPageProps = {
@@ -19,6 +20,7 @@ export default async function DashboardPage({
 }: DashboardPageProps) {
   const access = await getAccessState();
   const { notice } = await searchParams;
+  const uploadClipLabel = formatDurationLabel(CLIENT_UPLOAD_CLIP_DURATION_SECONDS);
 
   if (!access.session || !access.email) {
     redirect("/?notice=login-required");
@@ -81,14 +83,15 @@ export default async function DashboardPage({
 
           <div className="rounded-[1.5rem] border border-border bg-[#eef6ff] p-5">
             <p className="text-xs font-semibold tracking-[0.16em] text-[#2c6db2]">
-              최대 파일 길이
+              자동 업로드 정책
             </p>
             <p className="mt-2 text-2xl font-semibold text-foreground">
-              {formatDurationLabel(access.maxMediaDurationSeconds)}
+              {uploadClipLabel} 클립
             </p>
             <p className="mt-3 text-sm leading-6 text-muted">
-              허용 목록에 등록된 계정은 한 번에 이 길이 이하의 오디오 또는
-              비디오 파일을 업로드할 수 있습니다.
+              {uploadClipLabel}를 넘는 원본은 브라우저에서 첫 {uploadClipLabel}만 자동 업로드합니다.
+              큰 파일은 모바일 업로드용으로 다시 압축하고, 서버 파이프라인 자체는 최대{" "}
+              {formatDurationLabel(access.maxMediaDurationSeconds)}까지 처리합니다.
             </p>
           </div>
         </div>

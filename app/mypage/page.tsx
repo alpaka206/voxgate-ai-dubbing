@@ -5,10 +5,12 @@ import { AccessRequestCard } from "@/components/access-request-card";
 import { AppShell } from "@/components/app-shell";
 import { getAccessState } from "@/lib/auth";
 import { formatDurationLabel } from "@/lib/display";
+import { CLIENT_UPLOAD_CLIP_DURATION_SECONDS } from "@/lib/media-policy";
 import { getDailyUsageSummary } from "@/lib/usage";
 
 export default async function MyPage() {
   const access = await getAccessState();
+  const uploadClipLabel = formatDurationLabel(CLIENT_UPLOAD_CLIP_DURATION_SECONDS);
 
   if (!access.session || !access.email) {
     redirect("/?notice=login-required");
@@ -62,9 +64,9 @@ export default async function MyPage() {
                 </p>
               </div>
               <div>
-                <p className="text-sm text-muted">최대 길이</p>
+                <p className="text-sm text-muted">자동 업로드</p>
                 <p className="text-lg font-semibold text-foreground">
-                  {formatDurationLabel(access.maxMediaDurationSeconds)}
+                  {uploadClipLabel} 클립
                 </p>
               </div>
               <div>
@@ -75,8 +77,10 @@ export default async function MyPage() {
               </div>
             </div>
             <p className="mt-4 text-sm leading-6 text-muted">
-              허용 목록에 등록된 계정은 하루 {access.dailyGenerationLimit}회, 최대{" "}
-              {formatDurationLabel(access.maxMediaDurationSeconds)} 길이의 파일까지 더빙할 수 있습니다.
+              허용 목록에 등록된 계정은 하루 {access.dailyGenerationLimit}회 더빙할 수 있고,
+              {uploadClipLabel}를 넘는 원본은 브라우저에서 첫 {uploadClipLabel}만 자동 업로드합니다.
+              {uploadClipLabel} 이하인데도 큰 파일은 모바일 업로드용으로 다시 압축하고, 서버
+              파이프라인 자체는 최대 {formatDurationLabel(access.maxMediaDurationSeconds)} 길이까지 처리합니다.
             </p>
           </div>
 
