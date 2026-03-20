@@ -4,6 +4,11 @@ import { upload } from "@vercel/blob/client";
 import { ChangeEvent, FormEvent, useEffect, useState } from "react";
 
 import {
+  analyzeMediaFileForUpload,
+  prepareMediaFileForUpload,
+  type MediaUploadAnalysis,
+} from "@/lib/client-media";
+import {
   buildUploadBlobPath,
   getBlobAccess,
   shouldUseMultipartUpload,
@@ -11,6 +16,7 @@ import {
 import { formatDurationLabel, formatFileSize } from "@/lib/display";
 import type { VoiceOption } from "@/lib/elevenlabs";
 import type { TargetLanguage } from "@/lib/languages";
+import { CLIENT_UPLOAD_CLIP_DURATION_SECONDS } from "@/lib/media-policy";
 
 type DubbingStudioProps = {
   initialError?: string;
@@ -41,13 +47,17 @@ export function DubbingStudio({
   voices,
 }: DubbingStudioProps) {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedFileAnalysis, setSelectedFileAnalysis] = useState<MediaUploadAnalysis | null>(null);
   const [voiceId, setVoiceId] = useState(voices[0]?.id ?? "");
   const [targetLanguage, setTargetLanguage] = useState(targetLanguages[0]?.code ?? "en");
   const [error, setError] = useState(initialError ?? "");
+  const [isInspectingFile, setIsInspectingFile] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submissionPhase, setSubmissionPhase] = useState<"idle" | "uploading" | "processing">(
-    "idle",
-  );
+  const [submissionPhase, setSubmissionPhase] = useState<
+    "idle" | "preparing" | "uploading" | "processing"
+  >("idle");
+  const [preparationProgress, setPreparationProgress] = useState<number | null>(null);
+  const [preparedUploadSummary, setPreparedUploadSummary] = useState("");
   const [uploadProgress, setUploadProgress] = useState(0);
   const [result, setResult] = useState<ResultState>(null);
   const [usedCount, setUsedCount] = useState(initialUsedCount);
@@ -58,6 +68,44 @@ export function DubbingStudio({
     }
   }, [voiceId, voices]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!selectedFile) {
+      setSelectedFileAnalysis(null);
+      setIsInspectingFile(false);
+      return () => undefined;
+    }
+
+    setIsInspectingFile(true);
+
+    void analyzeMediaFileForUpload(selectedFile, maxUploadBytes)
+      .then((analysis) => {
+        if (!cancelled) {
+          setSelectedFileAnalysis(analysis);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setSelectedFileAnalysis({
+            durationSeconds: null,
+            needsClientProcessing: false,
+            processingMode: "none",
+            uploadDurationSeconds: null,
+          });
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsInspectingFile(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [maxUploadBytes, selectedFile]);
+
   const remainingCount = Math.max(usageLimit - usedCount, 0);
   const canSubmit =
     !isSubmitting &&
@@ -66,22 +114,36 @@ export function DubbingStudio({
     Boolean(targetLanguage) &&
     remainingCount > 0;
 
-  const fileSummary = selectedFile
-    ? `${selectedFile.name} / ${formatFileSize(selectedFile.size)}`
-    : null;
+  const shouldPrepareOnClient =
+    selectedFileAnalysis === null ? Boolean(selectedFile) : selectedFileAnalysis.needsClientProcessing;
+  const uploadClipLabel = formatDurationLabel(CLIENT_UPLOAD_CLIP_DURATION_SECONDS);
+  const maxUploadSizeLabel = formatFileSize(maxUploadBytes);
+  const originalDurationLabel =
+    selectedFileAnalysis?.durationSeconds !== null && selectedFileAnalysis?.durationSeconds !== undefined
+      ? formatDurationLabel(Math.max(1, Math.ceil(selectedFileAnalysis.durationSeconds)))
+      : null;
+  const uploadDurationLabel =
+    selectedFileAnalysis?.uploadDurationSeconds !== null &&
+    selectedFileAnalysis?.uploadDurationSeconds !== undefined
+      ? formatDurationLabel(Math.max(1, Math.ceil(selectedFileAnalysis.uploadDurationSeconds)))
+      : null;
 
   function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
     const nextFile = event.target.files?.[0] ?? null;
 
-    if (nextFile && nextFile.size > maxUploadBytes) {
-      setError(`현재는 ${formatFileSize(maxUploadBytes)} 이하 파일만 업로드할 수 있습니다.`);
+    if (nextFile && nextFile.size <= 0) {
+      setError("비어 있는 파일은 업로드할 수 없습니다.");
       setSelectedFile(null);
+      setSelectedFileAnalysis(null);
       setResult(null);
       event.target.value = "";
       return;
     }
 
     setError("");
+    setSelectedFileAnalysis(null);
+    setPreparedUploadSummary("");
+    setPreparationProgress(null);
     setSelectedFile(nextFile);
     setResult(null);
   }
@@ -97,18 +159,45 @@ export function DubbingStudio({
     setError("");
     setIsSubmitting(true);
     setResult(null);
-    setSubmissionPhase("uploading");
+    setPreparedUploadSummary("");
+    setPreparationProgress(null);
     setUploadProgress(0);
 
     try {
-      const uploadedBlob = await upload(buildUploadBlobPath(userEmail, selectedFile.name), selectedFile, {
-        access: getBlobAccess(),
-        handleUploadUrl: "/api/uploads",
-        multipart: shouldUseMultipartUpload(selectedFile.size),
-        onUploadProgress: (progressEvent) => {
-          setUploadProgress(Math.round(progressEvent.percentage));
-        },
+      setSubmissionPhase(shouldPrepareOnClient ? "preparing" : "uploading");
+
+      const preparedUpload = await prepareMediaFileForUpload(selectedFile, {
+        durationSeconds: selectedFileAnalysis?.durationSeconds,
+        maxUploadBytes,
+        onProgress: setPreparationProgress,
       });
+
+      setSelectedFileAnalysis({
+        durationSeconds: preparedUpload.durationSeconds,
+        needsClientProcessing: preparedUpload.needsClientProcessing,
+        processingMode: preparedUpload.processingMode,
+        uploadDurationSeconds: preparedUpload.uploadDurationSeconds,
+      });
+      setPreparedUploadSummary(
+        preparedUpload.file === selectedFile
+          ? `업로드 파일: 원본 그대로 / ${formatFileSize(preparedUpload.file.size)}`
+          : `업로드 파일: ${preparedUpload.file.name} / ${formatFileSize(preparedUpload.file.size)}${preparedUpload.wasTranscoded ? " · 모바일 업로드용으로 압축" : ` · 첫 ${uploadClipLabel} 클립`}`,
+      );
+
+      setSubmissionPhase("uploading");
+
+      const uploadedBlob = await upload(
+        buildUploadBlobPath(userEmail, preparedUpload.file.name),
+        preparedUpload.file,
+        {
+          access: getBlobAccess(),
+          handleUploadUrl: "/api/uploads",
+          multipart: shouldUseMultipartUpload(preparedUpload.file.size),
+          onUploadProgress: (progressEvent) => {
+            setUploadProgress(Math.round(progressEvent.percentage));
+          },
+        },
+      );
 
       setUploadProgress(100);
       setSubmissionPhase("processing");
@@ -150,6 +239,7 @@ export function DubbingStudio({
       );
     } finally {
       setSubmissionPhase("idle");
+      setPreparationProgress(null);
       setUploadProgress(0);
       setIsSubmitting(false);
     }
@@ -164,9 +254,10 @@ export function DubbingStudio({
             <p className="mt-2 text-lg font-semibold text-foreground">허용 목록 등록 완료</p>
           </div>
           <div className="rounded-[1.25rem] border border-border bg-[#fffaf6] px-4 py-4">
-            <p className="text-xs font-semibold tracking-[0.16em] text-accent">최대 길이</p>
-            <p className="mt-2 text-lg font-semibold text-foreground">
-              {formatDurationLabel(maxMediaDurationSeconds)}
+            <p className="text-xs font-semibold tracking-[0.16em] text-accent">자동 업로드 정책</p>
+            <p className="mt-2 text-lg font-semibold text-foreground">{uploadClipLabel} 클립</p>
+            <p className="mt-2 text-xs leading-5 text-muted">
+              {uploadClipLabel}를 넘는 원본은 선택 없이 첫 {uploadClipLabel}만 업로드합니다.
             </p>
           </div>
           <div className="rounded-[1.25rem] border border-border bg-[#f4fbf7] px-4 py-4">
@@ -197,8 +288,12 @@ export function DubbingStudio({
                 지원 형식: MP3, WAV, M4A, AAC, OGG, WEBM, MP4, MOV, MKV
               </span>
               <span className="text-sm leading-6 text-muted">
-                브라우저가 Vercel Blob으로 직접 업로드하므로 현재는 {formatFileSize(maxUploadBytes)} 이하
-                파일까지 처리할 수 있습니다.
+                {uploadClipLabel}를 넘는 파일은 브라우저에서 첫 {uploadClipLabel}만 잘라 업로드하고,
+                이미 {uploadClipLabel} 이하인데도 큰 파일은 모바일 업로드용으로 다시 압축합니다.
+              </span>
+              <span className="text-sm leading-6 text-muted">
+                서버에는 준비된 클립만 전송되며, 서버 파이프라인 자체는 최대{" "}
+                {formatDurationLabel(maxMediaDurationSeconds)} 길이까지 처리할 수 있습니다.
               </span>
               <input
                 accept="audio/*,video/*,.mp3,.wav,.m4a,.aac,.ogg,.webm,.mp4,.mov,.mkv"
@@ -208,8 +303,57 @@ export function DubbingStudio({
               />
             </label>
 
+            <div className="grid gap-3 rounded-[1.25rem] border border-[#f1dbc9] bg-[#fffaf5] px-4 py-4 text-sm sm:grid-cols-3">
+              <div>
+                <p className="text-xs font-semibold tracking-[0.14em] text-accent">적용 방식</p>
+                <p className="mt-2 font-semibold text-foreground">선택 없이 자동 적용</p>
+                <p className="mt-1 leading-5 text-muted">체크박스가 아니라 업로드 정책으로 고정되어 있습니다.</p>
+              </div>
+              <div>
+                <p className="text-xs font-semibold tracking-[0.14em] text-accent">길이 초과</p>
+                <p className="mt-2 font-semibold text-foreground">첫 {uploadClipLabel} 클립</p>
+                <p className="mt-1 leading-5 text-muted">
+                  원본 길이가 {uploadClipLabel}를 넘으면 브라우저가 먼저 잘라서 올립니다.
+                </p>
+              </div>
+              <div>
+                <p className="text-xs font-semibold tracking-[0.14em] text-accent">용량 초과</p>
+                <p className="mt-2 font-semibold text-foreground">모바일 업로드용 압축</p>
+                <p className="mt-1 leading-5 text-muted">
+                  {uploadClipLabel} 이하라도 {maxUploadSizeLabel}를 넘으면 다시 압축합니다.
+                </p>
+              </div>
+            </div>
+
             <div className="rounded-[1.25rem] border border-border bg-[#fcfbf8] px-4 py-4 text-sm text-muted">
-              {fileSummary ?? "아직 선택한 파일이 없습니다."}
+              {selectedFile ? (
+                <div className="space-y-2">
+                  <p className="font-semibold text-foreground">
+                    {selectedFile.name} / {formatFileSize(selectedFile.size)}
+                  </p>
+                  {isInspectingFile ? <p>원본 길이를 확인하는 중입니다.</p> : null}
+                  {originalDurationLabel ? <p>원본 길이: {originalDurationLabel}</p> : null}
+                  {selectedFileAnalysis?.processingMode === "clip" ? (
+                    <p>업로드 전 브라우저에서 첫 {uploadDurationLabel ?? uploadClipLabel}만 잘라 처리합니다.</p>
+                  ) : selectedFileAnalysis?.processingMode === "compress" ? (
+                    <p>
+                      {uploadClipLabel} 이하 파일이지만 용량이 커서 브라우저에서 업로드용 파일로 다시 압축합니다.
+                    </p>
+                  ) : (
+                    <p>{uploadClipLabel} 이하 파일은 원본 그대로 업로드합니다.</p>
+                  )}
+                  {preparedUploadSummary ? (
+                    <p className="font-medium text-foreground">{preparedUploadSummary}</p>
+                  ) : null}
+                  {!preparedUploadSummary && selectedFile.size > maxUploadBytes ? (
+                    <p>
+                      원본은 {maxUploadSizeLabel}를 넘지만, 브라우저가 업로드 가능한 크기로 먼저 준비합니다.
+                    </p>
+                  ) : null}
+                </div>
+              ) : (
+                "아직 선택한 파일이 없습니다."
+              )}
             </div>
           </div>
 
@@ -253,8 +397,8 @@ export function DubbingStudio({
           <div className="rounded-[1.5rem] bg-[linear-gradient(135deg,#fffaf5_0%,#f8fcfa_100%)] px-5 py-5">
             <p className="text-sm font-semibold text-foreground">처리 흐름</p>
             <p className="mt-2 text-sm leading-6 text-muted">
-              업로드한 파일에서 음성을 추출하고, 원문을 전사한 뒤 선택한 언어로 번역해 새로운 더빙
-              음성을 만듭니다.
+              브라우저가 먼저 업로드용 클립이나 모바일용 압축본을 자동으로 준비한 뒤 파일을 전송하고,
+              서버는 음성 추출, 전사, 번역, 더빙 음성 생성 순서로 결과를 만듭니다.
             </p>
           </div>
 
@@ -263,7 +407,11 @@ export function DubbingStudio({
             className="inline-flex h-12 items-center justify-center rounded-full bg-accent px-7 text-sm font-semibold text-white shadow-[0_16px_32px_rgba(255,127,92,0.24)] transition hover:-translate-y-0.5 hover:bg-accent-strong disabled:cursor-not-allowed disabled:border disabled:border-border disabled:bg-[#f4f4f1] disabled:text-muted disabled:shadow-none"
             disabled={!canSubmit}
           >
-            {submissionPhase === "uploading"
+            {submissionPhase === "preparing"
+              ? preparationProgress !== null
+                ? `브라우저에서 업로드 파일 준비 중... ${Math.round(preparationProgress * 100)}%`
+                : "브라우저에서 업로드 파일 준비 중..."
+              : submissionPhase === "uploading"
               ? `파일 업로드 중... ${uploadProgress}%`
               : submissionPhase === "processing"
                 ? "전사 · 번역 · 더빙 생성 중..."
