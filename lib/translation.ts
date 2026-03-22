@@ -134,24 +134,111 @@ function stripJsonCodeFence(text: string) {
     .trim();
 }
 
+type BatchTranslationPayload = {
+  translations?: Array<{
+    index?: number;
+    text?: string;
+  }>;
+};
+
+function tryParseBatchTranslationPayload(text: string) {
+  try {
+    return JSON.parse(text) as BatchTranslationPayload;
+  } catch {
+    return null;
+  }
+}
+
+function extractBalancedJsonObjects(text: string) {
+  const candidates: string[] = [];
+  let braceDepth = 0;
+  let objectStartIndex = -1;
+  let isEscaped = false;
+  let isInsideString = false;
+
+  for (let index = 0; index < text.length; index += 1) {
+    const character = text[index];
+
+    if (objectStartIndex === -1) {
+      if (character === "{") {
+        objectStartIndex = index;
+        braceDepth = 1;
+        isEscaped = false;
+        isInsideString = false;
+      }
+
+      continue;
+    }
+
+    if (isInsideString) {
+      if (isEscaped) {
+        isEscaped = false;
+        continue;
+      }
+
+      if (character === "\\") {
+        isEscaped = true;
+        continue;
+      }
+
+      if (character === '"') {
+        isInsideString = false;
+      }
+
+      continue;
+    }
+
+    if (character === '"') {
+      isInsideString = true;
+      continue;
+    }
+
+    if (character === "{") {
+      braceDepth += 1;
+      continue;
+    }
+
+    if (character !== "}") {
+      continue;
+    }
+
+    braceDepth -= 1;
+
+    if (braceDepth === 0) {
+      candidates.push(text.slice(objectStartIndex, index + 1));
+      objectStartIndex = -1;
+    }
+  }
+
+  return candidates;
+}
+
 function parseBatchTranslationResponse(text: string) {
   const normalized = stripJsonCodeFence(text);
-  const objectStartIndex = normalized.indexOf("{");
-  const objectEndIndex = normalized.lastIndexOf("}");
-  const jsonText =
-    objectStartIndex >= 0 && objectEndIndex >= objectStartIndex
-      ? normalized.slice(objectStartIndex, objectEndIndex + 1)
-      : normalized;
+  const candidateTexts = [normalized, ...extractBalancedJsonObjects(normalized)];
+  const attemptedCandidates = new Set<string>();
+  let payload: BatchTranslationPayload | null = null;
 
-  const payload = JSON.parse(jsonText) as {
-    translations?: Array<{
-      index?: number;
-      text?: string;
-    }>;
-  };
+  for (const candidateText of candidateTexts) {
+    const trimmedCandidate = candidateText.trim();
 
-  if (!Array.isArray(payload.translations)) {
-    throw new Error("Gemini 번역 결과 형식이 올바르지 않습니다.");
+    if (!trimmedCandidate || attemptedCandidates.has(trimmedCandidate)) {
+      continue;
+    }
+
+    attemptedCandidates.add(trimmedCandidate);
+    const parsedPayload = tryParseBatchTranslationPayload(trimmedCandidate);
+
+    if (!parsedPayload || !Array.isArray(parsedPayload.translations)) {
+      continue;
+    }
+
+    payload = parsedPayload;
+    break;
+  }
+
+  if (!payload || !Array.isArray(payload.translations)) {
+    throw new Error("Gemini 번역 결과 JSON을 해석하지 못했습니다.");
   }
 
   return payload.translations.map((item) => {

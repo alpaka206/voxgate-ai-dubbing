@@ -26,6 +26,7 @@ export type TimedAudioSegment = {
 const audioExtensions = new Set([".mp3", ".wav", ".m4a", ".aac", ".ogg", ".webm"]);
 const videoExtensions = new Set([".mp4", ".mov", ".webm", ".mkv"]);
 const MIN_AUDIO_DURATION_SECONDS = 0.2;
+const MAX_NATURAL_SLOWDOWN_RATIO = 0.9;
 
 function normalizeBundledPath(binaryPath: string) {
   const normalized = binaryPath.replaceAll("/", path.sep);
@@ -297,6 +298,12 @@ export async function fitAudioToDuration(options: {
     return options.inputPath;
   }
 
+  // If the translated line is much shorter than the source timing window,
+  // leaving a brief gap sounds more natural than over-stretching the voice.
+  if (speedRatio < MAX_NATURAL_SLOWDOWN_RATIO) {
+    return options.inputPath;
+  }
+
   const outputPath = path.join(options.workspaceDir, options.fileName);
   const filter = `${buildAtempoFilter(speedRatio)},atrim=0:${targetDurationSeconds.toFixed(3)}`;
 
@@ -378,7 +385,7 @@ export async function buildTimedDubbedAudio(options: {
   });
 
   filterParts.push(
-    `[0:a]${delayedLabels.join("")}amix=inputs=${options.segments.length + 1}:duration=first:dropout_transition=0,atrim=0:${Math.max(options.durationSeconds, MIN_AUDIO_DURATION_SECONDS).toFixed(3)}[outa]`,
+    `[0:a]${delayedLabels.join("")}amix=inputs=${options.segments.length + 1}:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.95,atrim=0:${Math.max(options.durationSeconds, MIN_AUDIO_DURATION_SECONDS).toFixed(3)}[outa]`,
   );
 
   await runFfmpeg([
